@@ -183,7 +183,7 @@ def fetch_topic_json(topic_url: str, json_url: str) -> dict[str, Any]:
                     new_posts = batch_data.get("post_stream", {}).get("posts", [])
                     topic_data["post_stream"]["posts"].extend(new_posts)
                 if i + batch_size < len(missing_ids):
-                    page.wait_for_timeout(500)
+                    page.wait_for_timeout(2000)
 
     return topic_data
 

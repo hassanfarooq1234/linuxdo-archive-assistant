@@ -64,9 +64,9 @@ async function fetchTopicJsonInPage() {
     const bData = await bResp.json();
     const newPosts = bData.post_stream?.posts || [];
     topicJson.post_stream.posts.push(...newPosts);
-    // Brief pause to avoid rate limiting
+    // Pause between batches to avoid Cloudflare / Discourse rate limiting
     if (i + BATCH < missingIds.length) {
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 2000));
     }
   }
 
