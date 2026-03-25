@@ -1,0 +1,33 @@
+{
+  "page": {
+    "format": "A4",
+    "margin_top": "20mm",
+    "margin_right": "16mm",
+    "margin_bottom": "20mm",
+    "margin_left": "16mm",
+    "display_header_footer": true,
+    "print_background": true
+  },
+  "header_template": "<div style='width:100%;font-size:8px;padding:0 10px;color:#6b7280;text-align:center;'>CTF Full Report · linux.do Archive</div>",
+  "footer_template": "<div style='width:100%;font-size:8px;padding:0 10px;color:#6b7280;text-align:center;'><span class='date'></span> · <span class='pageNumber'></span>/<span class='totalPages'></span></div>",
+  "html": {
+    "font_family": "\"Microsoft YaHei UI\", \"Segoe UI\", sans-serif",
+    "font_size": "14px",
+    "line_height": "1.68",
+    "max_width": "900px",
+    "text_color": "#1f2937",
+    "muted_color": "#4b5563",
+    "border_color": "#d1d5db",
+    "background_color": "#ffffff",
+    "h1_font_size": "30px",
+    "h2_font_size": "21px"
+  },
+  "cover": {
+    "enabled": true,
+    "title_prefix": "CTF Full Report",
+    "subtitle": "Challenge 05 · linux.do Topic Archive",
+    "show_meta": true,
+    "meta_label_1": "Topic ID",
+    "meta_label_2": "Source"
+  }
+}

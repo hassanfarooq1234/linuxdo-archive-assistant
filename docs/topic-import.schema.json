@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.challenge-05-linuxdo-archive/topic-import.schema.json",
+  "title": "TopicImportRequest",
+  "type": "object",
+  "required": ["topic_json"],
+  "properties": {
+    "source": {
+      "type": "string",
+      "description": "Request source identifier, e.g. browser_extension"
+    },
+    "topic_id": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "topic_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://linux\\.do/t/.+"
+    },
+    "topic_json": {
+      "type": "object",
+      "description": "Raw topic json from linux.do topic endpoint"
+    },
+    "output_root": {
+      "type": "string",
+      "description": "Relative path under challenge-05-linuxdo-archive, default cases"
+    },
+    "download_images": {
+      "type": "boolean",
+      "default": true
+    },
+    "image_retry_count": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 2
+    },
+    "image_retry_delay": {
+      "type": "number",
+      "minimum": 0.1,
+      "default": 1.5
+    },
+    "generate_pdf": {
+      "type": "boolean",
+      "default": true
+    },
+    "pdf_config_path": {
+      "type": "string",
+      "description": "Path to PDF style config JSON (inside challenge-05 directory)"
+    },
+    "pdf_style": {
+      "type": "object",
+      "description": "Inline style overrides for PDF and HTML rendering"
+    },
+    "keep_html_for_pdf": {
+      "type": "boolean",
+      "default": true
+    },
+    "update_index": {
+      "type": "boolean",
+      "default": true
+    },
+    "index_sort_by": {
+      "type": "string",
+      "enum": ["updated_desc", "updated_asc", "topic_id_desc", "topic_id_asc"],
+      "default": "updated_desc"
+    },
+    "index_only_with_pdf": {
+      "type": "boolean",
+      "default": false
+    },
+    "index_limit": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "enable_task_log": {
+      "type": "boolean",
+      "default": true
+    },
+    "task_log_path": {
+      "type": "string",
+      "description": "Path to jsonl task log file (inside challenge-05 directory)"
+    }
+  },
+  "additionalProperties": false
+}

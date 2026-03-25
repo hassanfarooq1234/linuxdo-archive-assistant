@@ -1,0 +1,13 @@
+[project]
+name = "challenge-05-linuxdo-archive"
+version = "0.1.0"
+description = "Archive linux.do topics (posts, replies, images) into local Markdown"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "camoufox[geoip]>=0.4.11",
+    "lxml>=5.2.2",
+    "markdown>=3.8",
+    "playwright>=1.58.0",
+    "requests>=2.32.3",
+]

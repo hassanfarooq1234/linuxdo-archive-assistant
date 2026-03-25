@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LinuxDo Archive</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+        background: #f3f4f6;
+        color: #111827;
+      }
+      .wrap {
+        width: 340px;
+        padding: 14px;
+      }
+      h1 {
+        font-size: 15px;
+        margin: 0 0 10px;
+      }
+      .hint {
+        font-size: 12px;
+        color: #4b5563;
+        margin-bottom: 10px;
+      }
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 8px;
+        background: #111827;
+        color: #fff;
+        padding: 10px 12px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      pre {
+        margin: 10px 0 0;
+        background: #fff;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 12px;
+        white-space: pre-wrap;
+        max-height: 180px;
+        overflow: auto;
+      }
+      .options {
+        background: #fff;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 8px;
+        margin-bottom: 10px;
+      }
+      .opt-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .opt-row:last-child {
+        margin-bottom: 0;
+      }
+      .opt-row label {
+        font-size: 12px;
+        color: #374151;
+      }
+      .opt-row select {
+        font-size: 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        padding: 4px 6px;
+        background: #fff;
+        color: #111827;
+      }
+      .history-head {
+        margin-top: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .history-head strong {
+        font-size: 12px;
+      }
+      .clear-btn {
+        border: 1px solid #d1d5db;
+        background: #fff;
+        color: #374151;
+        border-radius: 6px;
+        padding: 2px 8px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .history {
+        margin-top: 6px;
+        background: #fff;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 12px;
+        max-height: 140px;
+        overflow: auto;
+      }
+      .history-item {
+        padding: 6px 0;
+        border-bottom: 1px dashed #e5e7eb;
+      }
+      .history-item:last-child {
+        border-bottom: 0;
+      }
+      .history-empty {
+        color: #6b7280;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Challenge 05 Archiver</h1>
+      <div class="hint">仅处理当前标签页，单次手动触发，默认输出到 cases/&lt;topic_id&gt;/。</div>
+      <div class="options">
+        <div class="opt-row">
+          <label for="enablePdf">导出 PDF</label>
+          <input id="enablePdf" type="checkbox" checked />
+        </div>
+        <div class="opt-row">
+          <label for="pdfProfile">PDF 模板</label>
+          <select id="pdfProfile">
+            <option value="full">ctf-full</option>
+            <option value="brief">ctf-brief</option>
+          </select>
+        </div>
+      </div>
+      <button id="exportBtn">导出当前帖（JSON → MD+PDF）</button>
+      <pre id="log">准备就绪</pre>
+      <div class="history-head">
+        <strong>最近导出记录</strong>
+        <button class="clear-btn" id="clearHistoryBtn" type="button">清空</button>
+      </div>
+      <div class="history" id="historyList"></div>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
