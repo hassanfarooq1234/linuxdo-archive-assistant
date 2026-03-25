@@ -5,13 +5,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
+import sys
 import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from archive_core import archive_topic_from_data, infer_topic_id_from_json
 
@@ -67,7 +70,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self._send_json(HTTPStatus.OK, {"ok": True})
 
     def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/health":
+        parsed = urlparse(self.path)
+        if parsed.path == "/health":
             self._send_json(
                 HTTPStatus.OK,
                 {
@@ -78,7 +82,39 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if parsed.path == "/open-folder":
+            self._handle_open_folder(parsed.query)
+            return
         self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})
+
+    def _handle_open_folder(self, query_string: str) -> None:
+        params = parse_qs(query_string)
+        folder = params.get("path", [""])[0]
+        if not folder:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "path_required"})
+            return
+        folder_path = Path(folder).resolve()
+        workspace_root = self.server.workspace_root.resolve()  # type: ignore[attr-defined]
+        if not is_within_root(folder_path, workspace_root):
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "path_out_of_scope", "message": "Path must be inside workspace_root."},
+            )
+            return
+        if not folder_path.exists():
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "path_not_found", "message": f"Directory not found: {folder_path}"},
+            )
+            return
+        target = str(folder_path)
+        if sys.platform == "win32":
+            os.startfile(target)  # noqa: S606
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", target])  # noqa: S603, S607
+        else:
+            subprocess.Popen(["xdg-open", target])  # noqa: S603, S607
+        self._send_json(HTTPStatus.OK, {"ok": True, "opened": target})
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/import-topic":
@@ -245,6 +281,22 @@ class BridgeHandler(BaseHTTPRequestHandler):
             )
             return
 
+        post_start: int | None = None
+        post_end: int | None = None
+        raw_post_start = payload.get("post_start")
+        raw_post_end = payload.get("post_end")
+        try:
+            if raw_post_start is not None:
+                post_start = int(raw_post_start)
+            if raw_post_end is not None:
+                post_end = int(raw_post_end)
+        except (ValueError, TypeError):
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "error": "invalid_post_range", "message": "post_start/post_end must be integers"},
+            )
+            return
+
         try:
             result = archive_topic_from_data(
                 topic_data=topic_json,
@@ -264,6 +316,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 index_limit=index_limit,
                 enable_task_log=enable_task_log,
                 task_log_path=task_log_path,
+                post_start=post_start,
+                post_end=post_end,
             )
         except Exception as exc:  # noqa: BLE001
             self._send_json(

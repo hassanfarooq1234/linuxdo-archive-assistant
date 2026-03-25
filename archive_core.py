@@ -254,9 +254,16 @@ def render_markdown(
     download_images: bool = True,
     image_retry_count: int = 2,
     image_retry_delay_seconds: float = 1.5,
+    post_start: int | None = None,
+    post_end: int | None = None,
 ) -> str:
     posts = topic_data.get("post_stream", {}).get("posts", [])
     posts = sorted(posts, key=lambda p: p.get("post_number", 0))
+
+    if post_start is not None or post_end is not None:
+        lo = post_start if post_start is not None else 1
+        hi = post_end if post_end is not None else float("inf")
+        posts = [p for p in posts if lo <= p.get("post_number", 0) <= hi]
 
     lines: list[str] = []
     lines.append(f"# {topic_data.get('title', 'Untitled Topic')}")
@@ -671,6 +678,8 @@ def archive_topic_from_data(
     index_limit: int | None = None,
     enable_task_log: bool = True,
     task_log_path: Path | None = None,
+    post_start: int | None = None,
+    post_end: int | None = None,
 ) -> ArchiveResult:
     started_at = datetime.now(timezone.utc)
     final_topic_id = topic_id or infer_topic_id_from_json(topic_data)
@@ -697,6 +706,8 @@ def archive_topic_from_data(
             download_images=download_images,
             image_retry_count=image_retry_count,
             image_retry_delay_seconds=image_retry_delay_seconds,
+            post_start=post_start,
+            post_end=post_end,
         )
         markdown_path.write_text(markdown_content, encoding="utf-8")
 
@@ -789,6 +800,8 @@ def archive_topic_from_json_file(
     index_limit: int | None = None,
     enable_task_log: bool = True,
     task_log_path: Path | None = None,
+    post_start: int | None = None,
+    post_end: int | None = None,
 ) -> ArchiveResult:
     topic_data = json.loads(json_path.read_text(encoding="utf-8-sig"))
     topic_id = infer_topic_id_from_json(topic_data, fallback_name=json_path.stem)
@@ -812,4 +825,6 @@ def archive_topic_from_json_file(
         index_limit=index_limit,
         enable_task_log=enable_task_log,
         task_log_path=task_log_path,
+        post_start=post_start,
+        post_end=post_end,
     )

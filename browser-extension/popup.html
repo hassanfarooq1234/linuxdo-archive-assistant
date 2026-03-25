@@ -134,8 +134,18 @@
             <option value="brief">ctf-brief</option>
           </select>
         </div>
+        <div class="opt-row">
+          <label>楼层范围</label>
+          <span style="display:flex;align-items:center;gap:4px;">
+            <input id="postStart" type="number" min="1" placeholder="起始" style="width:52px;font-size:12px;border:1px solid #d1d5db;border-radius:6px;padding:4px 6px;" />
+            <span style="font-size:12px;">—</span>
+            <input id="postEnd" type="number" min="1" placeholder="结束" style="width:52px;font-size:12px;border:1px solid #d1d5db;border-radius:6px;padding:4px 6px;" />
+          </span>
+        </div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;">留空 = 全部楼层；仅填起始 = 从该楼到末尾</div>
       </div>
       <button id="exportBtn">导出当前帖（JSON → MD+PDF）</button>
+      <button id="openFolderBtn" style="display:none;margin-top:6px;background:#374151;">打开输出目录</button>
       <pre id="log">准备就绪</pre>
       <div class="history-head">
         <strong>最近导出记录</strong>

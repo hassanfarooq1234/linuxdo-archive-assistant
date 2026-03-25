@@ -80,6 +80,16 @@
     "task_log_path": {
       "type": "string",
       "description": "Path to jsonl task log file (inside challenge-05 directory)"
+    },
+    "post_start": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Start post number (inclusive). Omit for beginning."
+    },
+    "post_end": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "End post number (inclusive). Omit for all remaining."
     }
   },
   "additionalProperties": false

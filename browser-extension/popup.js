@@ -1,4 +1,5 @@
 const BRIDGE_URL = "http://127.0.0.1:17805/import-topic";
+const BRIDGE_OPEN_FOLDER_URL = "http://127.0.0.1:17805/open-folder";
 const HISTORY_KEY = "challenge05_export_history";
 const SETTINGS_KEY = "challenge05_export_settings";
 const MAX_HISTORY = 12;
@@ -14,6 +15,7 @@ const DEFAULT_SETTINGS = {
 };
 
 const exportBtn = document.getElementById("exportBtn");
+const openFolderBtn = document.getElementById("openFolderBtn");
 const logEl = document.getElementById("log");
 const historyListEl = document.getElementById("historyList");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
@@ -161,6 +163,7 @@ function bindSettingEvents() {
 
 async function runExport() {
   exportBtn.disabled = true;
+  openFolderBtn.style.display = "none";
   try {
     log("检查当前标签页...");
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -182,6 +185,9 @@ async function runExport() {
     const pdfConfigPath = PDF_PROFILE_MAP[profileKey];
     const mode = settings.enablePdf ? "md+pdf" : "md-only";
 
+    const postStartVal = document.getElementById("postStart").value.trim();
+    const postEndVal = document.getElementById("postEnd").value.trim();
+
     log(`发送到本地服务（${mode}，失败低频重试）...`);
     const payload = {
       source: "browser_extension",
@@ -198,6 +204,8 @@ async function runExport() {
       index_only_with_pdf: false,
       pdf_config_path: settings.enablePdf ? pdfConfigPath : "configs/pdf.default.json",
     };
+    if (postStartVal) payload.post_start = parseInt(postStartVal, 10);
+    if (postEndVal) payload.post_end = parseInt(postEndVal, 10);
     const result = await postToBridgeWithRetry(payload, 3);
 
     log(
@@ -211,6 +219,13 @@ async function runExport() {
         `Task Log: ${result.task_log_path || "(未记录)"}`,
       ].join("\n")
     );
+    if (result.output_dir) {
+      openFolderBtn.style.display = "block";
+      openFolderBtn.onclick = () => {
+        fetch(`${BRIDGE_OPEN_FOLDER_URL}?path=${encodeURIComponent(result.output_dir)}`)
+          .catch(() => {});
+      };
+    }
     await appendHistory({
       time: new Date().toISOString(),
       topicId: result.topic_id,

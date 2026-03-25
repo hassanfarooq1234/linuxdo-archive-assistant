@@ -94,6 +94,16 @@ def main() -> None:
         "--task-log-path",
         help="Override task log file path.",
     )
+    parser.add_argument(
+        "--post-start",
+        type=int,
+        help="Start post number (inclusive). Omit for beginning.",
+    )
+    parser.add_argument(
+        "--post-end",
+        type=int,
+        help="End post number (inclusive). Omit for all remaining.",
+    )
     args = parser.parse_args()
 
     if not args.topic_url and not args.input_json:
@@ -121,6 +131,8 @@ def main() -> None:
             index_limit=args.index_limit,
             enable_task_log=not args.no_task_log,
             task_log_path=task_log_path,
+            post_start=args.post_start,
+            post_end=args.post_end,
         )
     else:
         topic_url = args.topic_url.strip()
@@ -144,6 +156,8 @@ def main() -> None:
             index_limit=args.index_limit,
             enable_task_log=not args.no_task_log,
             task_log_path=task_log_path,
+            post_start=args.post_start,
+            post_end=args.post_end,
         )
 
     print(f"[OK] Topic ID : {result.topic_id}")
