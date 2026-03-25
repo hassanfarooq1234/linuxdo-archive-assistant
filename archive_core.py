@@ -445,6 +445,19 @@ def markdown_to_html(
       border-radius: 6px;
       overflow: auto;
     }}
+    a {{
+      color: #2563eb;
+      text-decoration: underline;
+    }}
+    a[href]:after {{
+      content: " (" attr(href) ")";
+      font-size: 0.85em;
+      color: var(--muted);
+      word-break: break-all;
+    }}
+    a[href^="images/"]:after {{
+      content: none;
+    }}
     hr {{
       border: none;
       border-top: 1px solid var(--border);
