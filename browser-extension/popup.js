@@ -46,9 +46,33 @@ async function fetchTopicJsonInPage() {
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}: ${text.slice(0, 140)}`);
   }
+  const topicJson = JSON.parse(text);
+
+  // Paginate: fetch remaining posts via stream IDs
+  const stream = topicJson.post_stream?.stream || [];
+  const loadedIds = new Set((topicJson.post_stream?.posts || []).map((p) => p.id));
+  const missingIds = stream.filter((id) => !loadedIds.has(id));
+
+  const BATCH = 20;
+  const topicId = topicJson.id || cleanPath.match(/(\d+)/)?.[1];
+  for (let i = 0; i < missingIds.length; i += BATCH) {
+    const batch = missingIds.slice(i, i + BATCH);
+    const params = batch.map((id) => `post_ids[]=${id}`).join("&");
+    const batchUrl = `${url.origin}/t/${topicId}/posts.json?${params}&_ts=${Date.now()}`;
+    const bResp = await fetch(batchUrl, { credentials: "include", cache: "no-store" });
+    if (!bResp.ok) continue;
+    const bData = await bResp.json();
+    const newPosts = bData.post_stream?.posts || [];
+    topicJson.post_stream.posts.push(...newPosts);
+    // Brief pause to avoid rate limiting
+    if (i + BATCH < missingIds.length) {
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
+
   return {
     topicUrl: window.location.href,
-    topicJson: JSON.parse(text),
+    topicJson,
   };
 }
 
@@ -171,7 +195,7 @@ async function runExport() {
       throw new Error("当前页面不是 linux.do 主题帖。");
     }
 
-    log("从当前页面读取 topic JSON...");
+    log("从当前页面读取 topic JSON（含分页拉取全部楼层）...");
     const [execResult] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: fetchTopicJsonInPage,
@@ -179,6 +203,9 @@ async function runExport() {
     if (!execResult?.result?.topicJson) {
       throw new Error("未获取到 topic JSON。");
     }
+
+    const totalPosts = execResult.result.topicJson.post_stream?.posts?.length || 0;
+    log(`已获取 ${totalPosts} 楼，准备发送...`);
 
     const settings = await loadSettings();
     const profileKey = settings.pdfProfile;
@@ -221,9 +248,16 @@ async function runExport() {
     );
     if (result.output_dir) {
       openFolderBtn.style.display = "block";
-      openFolderBtn.onclick = () => {
-        fetch(`${BRIDGE_OPEN_FOLDER_URL}?path=${encodeURIComponent(result.output_dir)}`)
-          .catch(() => {});
+      openFolderBtn.onclick = async () => {
+        try {
+          const resp = await fetch(`${BRIDGE_OPEN_FOLDER_URL}?path=${encodeURIComponent(result.output_dir)}`);
+          const data = await resp.json();
+          if (!data.ok) {
+            log(`打开目录失败: ${data.error || data.message || "unknown"}`);
+          }
+        } catch (err) {
+          log(`打开目录失败: ${err.message}`);
+        }
       };
     }
     await appendHistory({
