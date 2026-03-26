@@ -24,7 +24,7 @@
     },
     "output_root": {
       "type": "string",
-      "description": "Relative path under challenge-05-linuxdo-archive, default cases"
+      "description": "Relative path under workspace_root, default cases"
     },
     "download_images": {
       "type": "boolean",
@@ -79,7 +79,7 @@
     },
     "task_log_path": {
       "type": "string",
-      "description": "Path to jsonl task log file (inside challenge-05 directory)"
+      "description": "Path to jsonl task log file (inside workspace_root)"
     },
     "post_start": {
       "type": "integer",

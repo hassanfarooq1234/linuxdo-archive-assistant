@@ -200,8 +200,11 @@ def download_image(
     output_path: Path,
     retry_count: int = 2,
     retry_delay_seconds: float = 1.5,
+    referer: str = "",
 ) -> None:
     headers = {"User-Agent": USER_AGENT}
+    if referer:
+        headers["Referer"] = referer
     last_exc: Exception | None = None
     for attempt in range(retry_count + 1):
         try:
@@ -243,27 +246,41 @@ def rewrite_post_html_and_download_images(
         output_file = image_dir / file_name
 
         if download_images:
+            referer = topic_url
             try:
                 download_image(
                     source_url,
                     output_file,
                     retry_count=image_retry_count,
                     retry_delay_seconds=image_retry_delay_seconds,
+                    referer=referer,
                 )
             except Exception:
                 fallback = img.get("src")
                 if not fallback:
+                    alt = img.get("alt") or img.get("title") or ""
+                    if alt:
+                        img.tail = (alt + " ") + (img.tail or "")
+                    print(f"  [WARN] skip image (no fallback): {source_url}")
                     continue
                 fallback_url = urljoin(topic_url, fallback)
                 ext = infer_extension_from_url(fallback_url)
                 file_name = f"post_{post_number:03d}_img_{idx:02d}{ext}"
                 output_file = image_dir / file_name
-                download_image(
-                    fallback_url,
-                    output_file,
-                    retry_count=image_retry_count,
-                    retry_delay_seconds=image_retry_delay_seconds,
-                )
+                try:
+                    download_image(
+                        fallback_url,
+                        output_file,
+                        retry_count=image_retry_count,
+                        retry_delay_seconds=image_retry_delay_seconds,
+                        referer=referer,
+                    )
+                except Exception:
+                    alt = img.get("alt") or img.get("title") or ""
+                    if alt:
+                        img.tail = (alt + " ") + (img.tail or "")
+                    print(f"  [WARN] skip image (fallback also failed): {fallback_url}")
+                    continue
         else:
             output_file.touch(exist_ok=True)
 
