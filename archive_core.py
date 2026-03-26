@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urljoin, urlparse, urlsplit
 
 import markdown
@@ -297,6 +297,27 @@ def rewrite_post_html_and_download_images(
     return inner.strip(), local_files
 
 
+def emit_progress(
+    progress_callback: Callable[[dict[str, Any]], None] | None,
+    *,
+    stage: str,
+    message: str,
+    current: int | None = None,
+    total: int | None = None,
+) -> None:
+    if not progress_callback:
+        return
+    payload: dict[str, Any] = {
+        "stage": stage,
+        "message": message,
+    }
+    if current is not None:
+        payload["current"] = current
+    if total is not None:
+        payload["total"] = total
+    progress_callback(payload)
+
+
 def render_markdown(
     topic_url: str,
     topic_data: dict[str, Any],
@@ -306,6 +327,7 @@ def render_markdown(
     image_retry_delay_seconds: float = 1.5,
     post_start: int | None = None,
     post_end: int | None = None,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> str:
     posts = topic_data.get("post_stream", {}).get("posts", [])
     posts = sorted(posts, key=lambda p: p.get("post_number", 0))
@@ -325,7 +347,16 @@ def render_markdown(
     lines.append("---")
     lines.append("")
 
-    for post in posts:
+    total_posts = len(posts)
+    emit_progress(
+        progress_callback,
+        stage="rendering_markdown",
+        message=f"正在整理正文与图片（0/{total_posts} 楼）...",
+        current=0,
+        total=total_posts,
+    )
+
+    for index, post in enumerate(posts, start=1):
         post_number = int(post.get("post_number", 0))
         username = post.get("username", "")
         name = post.get("name") or ""
@@ -334,6 +365,13 @@ def render_markdown(
         reply_to = post.get("reply_to_post_number")
 
         cooked = post.get("cooked", "")
+        emit_progress(
+            progress_callback,
+            stage="rendering_markdown",
+            message=f"正在处理第 {post_number} 楼（{index}/{total_posts}）...",
+            current=index,
+            total=total_posts,
+        )
         rewritten_html, _ = rewrite_post_html_and_download_images(
             cooked_html=cooked,
             post_number=post_number,
@@ -743,6 +781,7 @@ def archive_topic_from_data(
     task_log_path: Path | None = None,
     post_start: int | None = None,
     post_end: int | None = None,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> ArchiveResult:
     started_at = datetime.now(timezone.utc)
     final_topic_id = topic_id or infer_topic_id_from_json(topic_data)
@@ -758,10 +797,12 @@ def archive_topic_from_data(
     log_target = (task_log_path or DEFAULT_TASK_LOG_PATH).resolve()
 
     try:
+        emit_progress(progress_callback, stage="writing_raw_json", message="正在写入原始 JSON...")
         raw_dir.mkdir(parents=True, exist_ok=True)
         images_dir.mkdir(parents=True, exist_ok=True)
         raw_json_path.write_text(json.dumps(topic_data, ensure_ascii=False, indent=2), encoding="utf-8")
 
+        emit_progress(progress_callback, stage="rendering_markdown", message="正在生成 Markdown...")
         markdown_content = render_markdown(
             topic_url=topic_url,
             topic_data=topic_data,
@@ -771,10 +812,12 @@ def archive_topic_from_data(
             image_retry_delay_seconds=image_retry_delay_seconds,
             post_start=post_start,
             post_end=post_end,
+            progress_callback=progress_callback,
         )
         markdown_path.write_text(markdown_content, encoding="utf-8")
 
         if generate_pdf:
+            emit_progress(progress_callback, stage="generating_pdf", message="正在生成 PDF，请稍候...")
             pdf_path = output_dir / f"topic_{final_topic_id}.pdf"
             html_path = render_pdf_from_markdown(
                 markdown_path=markdown_path,
@@ -788,6 +831,7 @@ def archive_topic_from_data(
             )
 
         if update_index:
+            emit_progress(progress_callback, stage="updating_index", message="正在更新索引与收尾...")
             resolved_index_root: Path | None = None
             if index_root:
                 resolved_index_root = index_root.resolve()
@@ -813,9 +857,11 @@ def archive_topic_from_data(
             index_path=index_path,
             task_log_path=log_target if enable_task_log else None,
         )
+        emit_progress(progress_callback, stage="completed", message="导出完成。")
         return result
     except Exception as exc:  # noqa: BLE001
         error_message = str(exc)
+        emit_progress(progress_callback, stage="failed", message=f"导出失败：{error_message}")
         raise
     finally:
         if enable_task_log:
@@ -865,6 +911,7 @@ def archive_topic_from_json_file(
     task_log_path: Path | None = None,
     post_start: int | None = None,
     post_end: int | None = None,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> ArchiveResult:
     topic_data = json.loads(json_path.read_text(encoding="utf-8-sig"))
     topic_id = infer_topic_id_from_json(topic_data, fallback_name=json_path.stem)
@@ -890,4 +937,5 @@ def archive_topic_from_json_file(
         task_log_path=task_log_path,
         post_start=post_start,
         post_end=post_end,
+        progress_callback=progress_callback,
     )

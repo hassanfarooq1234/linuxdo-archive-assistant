@@ -81,6 +81,11 @@
       "type": "string",
       "description": "Path to jsonl task log file (inside workspace_root)"
     },
+    "async_task": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, bridge returns 202 + task_id and client polls /task-status locally"
+    },
     "post_start": {
       "type": "integer",
       "minimum": 1,

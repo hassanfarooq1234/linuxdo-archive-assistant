@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -30,6 +31,10 @@ def is_within_root(path: Path, root: Path) -> bool:
     resolved_path = path.resolve()
     resolved_root = root.resolve()
     return resolved_path == resolved_root or resolved_root in resolved_path.parents
+
+
+def utc_now_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 class ImportGuard:
@@ -82,10 +87,27 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if parsed.path == "/task-status":
+            self._handle_task_status(parsed.query)
+            return
         if parsed.path == "/open-folder":
             self._handle_open_folder(parsed.query)
             return
         self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})
+
+    def _handle_task_status(self, query_string: str) -> None:
+        params = parse_qs(query_string)
+        task_id = params.get("task_id", [""])[0]
+        if not task_id:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "task_id_required"})
+            return
+        with self.server.task_lock:  # type: ignore[attr-defined]
+            record = self.server.task_records.get(task_id)  # type: ignore[attr-defined]
+            snapshot = dict(record) if record else None
+        if not snapshot:
+            self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "task_not_found"})
+            return
+        self._send_json(HTTPStatus.OK, {"ok": True, **snapshot})
 
     def _handle_open_folder(self, query_string: str) -> None:
         params = parse_qs(query_string)
@@ -116,49 +138,29 @@ class BridgeHandler(BaseHTTPRequestHandler):
             subprocess.Popen(["xdg-open", target])  # noqa: S603, S607
         self._send_json(HTTPStatus.OK, {"ok": True, "opened": target})
 
-    def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/import-topic":
-            self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})
-            return
-
-        if not self.server.guard.acquire():  # type: ignore[attr-defined]
-            self._send_json(
-                HTTPStatus.TOO_MANY_REQUESTS,
-                {
-                    "ok": False,
-                    "error": "rate_limited_or_busy",
-                    "message": "Only one import task is allowed at a time.",
-                },
-            )
-            return
-
-        try:
-            self._handle_import_topic()
-        finally:
-            self.server.guard.release()  # type: ignore[attr-defined]
-
-    def _handle_import_topic(self) -> None:
+    def _read_json_body(self) -> dict[str, Any] | None:
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0:
             self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "empty_body"})
-            return
+            return None
         body = self.rfile.read(length)
         try:
-            payload = json.loads(body.decode("utf-8"))
+            return json.loads(body.decode("utf-8"))
         except Exception as exc:  # noqa: BLE001
             self._send_json(
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": "invalid_json", "message": str(exc)},
             )
-            return
+            return None
 
+    def _prepare_import_params(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         topic_json = payload.get("topic_json")
         if not isinstance(topic_json, dict):
             self._send_json(
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": "topic_json_required"},
             )
-            return
+            return None
 
         topic_id = str(payload.get("topic_id") or infer_topic_id_from_json(topic_json))
         topic_url = str(payload.get("topic_url") or f"https://linux.do/t/topic/{topic_id}")
@@ -168,7 +170,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": "host_not_allowed", "allowed": sorted(ALLOWED_TOPIC_HOSTS)},
             )
-            return
+            return None
 
         workspace_root = self.server.workspace_root.resolve()  # type: ignore[attr-defined]
         default_output_root = self.server.default_output_root.resolve()  # type: ignore[attr-defined]
@@ -190,7 +192,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     "message": "Output directory must stay inside workspace_root.",
                 },
             )
-            return
+            return None
 
         pdf_config_path: Path | None = None
         payload_pdf_config = payload.get("pdf_config_path")
@@ -209,7 +211,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                         "message": "pdf_config_path must stay inside challenge-05-linuxdo-archive.",
                     },
                 )
-                return
+                return None
             if not candidate.exists() or not candidate.is_file():
                 self._send_json(
                     HTTPStatus.BAD_REQUEST,
@@ -219,7 +221,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                         "message": f"pdf config not found: {candidate}",
                     },
                 )
-                return
+                return None
             pdf_config_path = candidate
         elif DEFAULT_PDF_CONFIG.exists():
             pdf_config_path = DEFAULT_PDF_CONFIG
@@ -236,7 +238,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": "invalid_index_sort_by", "allowed": sorted(ALLOWED_INDEX_SORT_BY)},
             )
-            return
+            return None
         index_only_with_pdf = bool(payload.get("index_only_with_pdf", False))
         index_limit_raw = payload.get("index_limit")
         try:
@@ -246,13 +248,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": "invalid_index_limit", "message": "index_limit must be an integer"},
             )
-            return
+            return None
         if index_limit is not None and index_limit <= 0:
             self._send_json(
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": "invalid_index_limit", "message": "index_limit must be > 0"},
             )
-            return
+            return None
         enable_task_log = bool(payload.get("enable_task_log", True))
         task_log_path: Path | None = default_task_log_path if enable_task_log else None
         payload_task_log = payload.get("task_log_path")
@@ -271,7 +273,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                         "message": "task_log_path must stay inside workspace_root.",
                     },
                 )
-                return
+                return None
             task_log_path = candidate_log
         pdf_style = payload.get("pdf_style")
         if pdf_style is not None and not isinstance(pdf_style, dict):
@@ -279,7 +281,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": "pdf_style_must_be_object"},
             )
-            return
+            return None
 
         post_start: int | None = None
         post_end: int | None = None
@@ -295,54 +297,184 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 HTTPStatus.BAD_REQUEST,
                 {"ok": False, "error": "invalid_post_range", "message": "post_start/post_end must be integers"},
             )
+            return None
+
+        return {
+            "topic_data": topic_json,
+            "topic_url": topic_url,
+            "topic_id": topic_id,
+            "output_dir": output_dir,
+            "pdf_config_path": pdf_config_path,
+            "download_images": download_images,
+            "image_retry_count": image_retry_count,
+            "image_retry_delay_seconds": image_retry_delay,
+            "generate_pdf": generate_pdf,
+            "keep_html_for_pdf": keep_html_for_pdf,
+            "update_index": update_index,
+            "index_sort_by": index_sort_by,
+            "index_only_with_pdf": index_only_with_pdf,
+            "index_limit": index_limit,
+            "enable_task_log": enable_task_log,
+            "task_log_path": task_log_path,
+            "pdf_style": pdf_style,
+            "post_start": post_start,
+            "post_end": post_end,
+        }
+
+    def _build_result_payload(self, result: Any, pdf_config_path: Path | None) -> dict[str, Any]:
+        return {
+            "topic_id": result.topic_id,
+            "topic_url": result.topic_url,
+            "output_dir": str(result.output_dir),
+            "markdown_path": str(result.markdown_path),
+            "raw_json_path": str(result.raw_json_path),
+            "images_dir": str(result.images_dir),
+            "html_path": str(result.html_path) if result.html_path else None,
+            "pdf_path": str(result.pdf_path) if result.pdf_path else None,
+            "pdf_config_path": str(pdf_config_path) if pdf_config_path else None,
+            "index_path": str(result.index_path) if result.index_path else None,
+            "task_log_path": str(result.task_log_path) if result.task_log_path else None,
+        }
+
+    def _execute_import(self, params: dict[str, Any], progress_callback: Any = None) -> dict[str, Any]:
+        result = archive_topic_from_data(
+            topic_data=params["topic_data"],
+            topic_url=params["topic_url"],
+            output_dir=params["output_dir"],
+            topic_id=params["topic_id"],
+            download_images=params["download_images"],
+            image_retry_count=params["image_retry_count"],
+            image_retry_delay_seconds=params["image_retry_delay_seconds"],
+            generate_pdf=params["generate_pdf"],
+            keep_html_for_pdf=params["keep_html_for_pdf"],
+            pdf_style=params["pdf_style"],
+            pdf_config_path=params["pdf_config_path"],
+            update_index=params["update_index"],
+            index_sort_by=params["index_sort_by"],
+            index_only_with_pdf=params["index_only_with_pdf"],
+            index_limit=params["index_limit"],
+            enable_task_log=params["enable_task_log"],
+            task_log_path=params["task_log_path"],
+            post_start=params["post_start"],
+            post_end=params["post_end"],
+            progress_callback=progress_callback,
+        )
+        return self._build_result_payload(result, params["pdf_config_path"])
+
+    def _create_task_record(self, task_id: str, params: dict[str, Any]) -> None:
+        record = {
+            "task_id": task_id,
+            "status": "queued",
+            "stage": "queued",
+            "message": "任务已创建，等待后台执行...",
+            "current": None,
+            "total": None,
+            "created_at": utc_now_iso(),
+            "updated_at": utc_now_iso(),
+            "topic_id": params["topic_id"],
+            "topic_url": params["topic_url"],
+            "result": None,
+            "error": None,
+        }
+        with self.server.task_lock:  # type: ignore[attr-defined]
+            self.server.task_records[task_id] = record  # type: ignore[attr-defined]
+
+    def _update_task_record(self, task_id: str, **fields: Any) -> None:
+        with self.server.task_lock:  # type: ignore[attr-defined]
+            record = self.server.task_records.get(task_id)  # type: ignore[attr-defined]
+            if not record:
+                return
+            record.update(fields)
+            record["updated_at"] = utc_now_iso()
+
+    def _run_async_import_task(self, task_id: str, params: dict[str, Any]) -> None:
+        try:
+            self._update_task_record(task_id, status="running", stage="starting", message="后台任务已开始...")
+
+            def progress_callback(progress: dict[str, Any]) -> None:
+                self._update_task_record(task_id, status="running", **progress)
+
+            result_payload = self._execute_import(params, progress_callback=progress_callback)
+            self._update_task_record(
+                task_id,
+                status="completed",
+                stage="completed",
+                message="导出完成。",
+                result=result_payload,
+                error=None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._update_task_record(
+                task_id,
+                status="failed",
+                stage="failed",
+                message=f"导出失败：{exc}",
+                error=str(exc),
+            )
+        finally:
+            self.server.guard.release()  # type: ignore[attr-defined]
+
+    def do_POST(self) -> None:  # noqa: N802
+        if self.path != "/import-topic":
+            self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not_found"})
+            return
+
+        payload = self._read_json_body()
+        if payload is None:
+            return
+        self._handle_import_topic(payload)
+
+    def _handle_import_topic(self, payload: dict[str, Any]) -> None:
+        params = self._prepare_import_params(payload)
+        if params is None:
+            return
+
+        if not self.server.guard.acquire():  # type: ignore[attr-defined]
+            self._send_json(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {
+                    "ok": False,
+                    "error": "rate_limited_or_busy",
+                    "message": "Only one import task is allowed at a time.",
+                },
+            )
+            return
+
+        wants_async = bool(payload.get("async_task"))
+        if wants_async:
+            task_id = uuid.uuid4().hex
+            self._create_task_record(task_id, params)
+            worker = threading.Thread(
+                target=self._run_async_import_task,
+                args=(task_id, params),
+                daemon=True,
+            )
+            worker.start()
+            self._send_json(
+                HTTPStatus.ACCEPTED,
+                {
+                    "ok": True,
+                    "async_task": True,
+                    "task_id": task_id,
+                    "status": "queued",
+                    "poll_url": f"/task-status?task_id={task_id}",
+                    "message": "Task accepted. Poll local bridge for progress.",
+                },
+            )
             return
 
         try:
-            result = archive_topic_from_data(
-                topic_data=topic_json,
-                topic_url=topic_url,
-                output_dir=output_dir,
-                topic_id=topic_id,
-                download_images=download_images,
-                image_retry_count=image_retry_count,
-                image_retry_delay_seconds=image_retry_delay,
-                generate_pdf=generate_pdf,
-                keep_html_for_pdf=keep_html_for_pdf,
-                pdf_style=pdf_style,
-                pdf_config_path=pdf_config_path,
-                update_index=update_index,
-                index_sort_by=index_sort_by,
-                index_only_with_pdf=index_only_with_pdf,
-                index_limit=index_limit,
-                enable_task_log=enable_task_log,
-                task_log_path=task_log_path,
-                post_start=post_start,
-                post_end=post_end,
-            )
+            result_payload = self._execute_import(params)
         except Exception as exc:  # noqa: BLE001
             self._send_json(
                 HTTPStatus.INTERNAL_SERVER_ERROR,
                 {"ok": False, "error": "archive_failed", "message": str(exc)},
             )
             return
+        finally:
+            self.server.guard.release()  # type: ignore[attr-defined]
 
-        self._send_json(
-            HTTPStatus.OK,
-            {
-                "ok": True,
-                "topic_id": result.topic_id,
-                "topic_url": result.topic_url,
-                "output_dir": str(result.output_dir),
-                "markdown_path": str(result.markdown_path),
-                "raw_json_path": str(result.raw_json_path),
-                "images_dir": str(result.images_dir),
-                "html_path": str(result.html_path) if result.html_path else None,
-                "pdf_path": str(result.pdf_path) if result.pdf_path else None,
-                "pdf_config_path": str(pdf_config_path) if pdf_config_path else None,
-                "index_path": str(result.index_path) if result.index_path else None,
-                "task_log_path": str(result.task_log_path) if result.task_log_path else None,
-            },
-        )
+        self._send_json(HTTPStatus.OK, {"ok": True, **result_payload})
 
     def log_message(self, format: str, *args: object) -> None:
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -376,6 +508,8 @@ def main() -> None:
     server.workspace_root = workspace_root  # type: ignore[attr-defined]
     server.default_output_root = workspace_root / "cases"  # type: ignore[attr-defined]
     server.default_task_log_path = workspace_root / "logs" / "archive_tasks.jsonl"  # type: ignore[attr-defined]
+    server.task_records = {}  # type: ignore[attr-defined]
+    server.task_lock = threading.Lock()  # type: ignore[attr-defined]
     print(f"[READY] Local bridge server running at http://{args.host}:{args.port}")
     print(f"[READY] Workspace root: {workspace_root}")
     print("[READY] Safety guard: single-task + minimum interval enabled")

@@ -1,12 +1,14 @@
 const BRIDGE_URL = "http://127.0.0.1:17805/import-topic";
 const BRIDGE_OPEN_FOLDER_URL = "http://127.0.0.1:17805/open-folder";
 const BRIDGE_HEALTH_URL = "http://127.0.0.1:17805/health";
+const BRIDGE_TASK_STATUS_URL = "http://127.0.0.1:17805/task-status";
 const BRIDGE_PROTOCOL_URL = "linuxdo-archive://start";
 const HISTORY_KEY = "challenge05_export_history";
 const SETTINGS_KEY = "challenge05_export_settings";
 const MAX_HISTORY = 12;
 const BRIDGE_START_TIMEOUT_MS = 15000;
 const BRIDGE_POLL_INTERVAL_MS = 1000;
+const TASK_POLL_TIMEOUT_MS = 30 * 60 * 1000;
 
 const PDF_PROFILE_MAP = {
   full: "configs/pdf.ctf-full.json",
@@ -182,7 +184,40 @@ function formatTime(iso) {
   return d.toLocaleString("zh-CN", { hour12: false });
 }
 
-async function postToBridgeWithRetry(payload, maxAttempts = 3) {
+function formatStageLabel(stage) {
+  const labels = {
+    queued: "\u6392\u961f\u4e2d",
+    starting: "\u51c6\u5907\u5f00\u59cb",
+    writing_raw_json: "\u5199\u5165\u539f\u59cb JSON",
+    rendering_markdown: "\u6574\u7406\u6b63\u6587\u4e0e\u56fe\u7247",
+    generating_pdf: "\u751f\u6210 PDF",
+    updating_index: "\u66f4\u65b0\u7d22\u5f15",
+    completed: "\u5df2\u5b8c\u6210",
+    failed: "\u5931\u8d25",
+  };
+  return labels[stage] || stage || "\u8fdb\u884c\u4e2d";
+}
+
+function formatTaskProgress(task, mode) {
+  const lines = [];
+  lines.push(`\u4efb\u52a1\u72b6\u6001\uff1a${task.status === "queued" ? "\u6392\u961f\u4e2d" : task.status === "completed" ? "\u5df2\u5b8c\u6210" : task.status === "failed" ? "\u5931\u8d25" : "\u6267\u884c\u4e2d"}`);
+  lines.push(`\u5f53\u524d\u9636\u6bb5\uff1a${formatStageLabel(task.stage)}`);
+  if (task.message) {
+    lines.push(task.message);
+  }
+  if (typeof task.current === "number" && typeof task.total === "number") {
+    lines.push(`\u697c\u5c42\u8fdb\u5ea6\uff1a${task.current}/${task.total}`);
+  }
+  if (task.topic_id) {
+    lines.push(`Topic ID: ${task.topic_id}`);
+  }
+  if (mode) {
+    lines.push(`Mode: ${mode}`);
+  }
+  return lines.join("\n");
+}
+
+async function startAsyncImportWithRetry(payload, maxAttempts = 3) {
   let lastError = null;
   for (let i = 0; i < maxAttempts; i += 1) {
     try {
@@ -204,6 +239,56 @@ async function postToBridgeWithRetry(payload, maxAttempts = 3) {
     }
   }
   throw lastError || new Error("Bridge request failed");
+}
+
+async function fetchTaskStatus(taskId) {
+  const resp = await fetch(`${BRIDGE_TASK_STATUS_URL}?task_id=${encodeURIComponent(taskId)}`, {
+    cache: "no-store",
+  });
+  const result = await resp.json();
+  if (!resp.ok || !result.ok) {
+    throw new Error(result.message || result.error || `Task status HTTP ${resp.status}`);
+  }
+  return result;
+}
+
+async function pollTaskUntilDone(taskId, mode, onProgress, timeoutMs = TASK_POLL_TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  let transientErrors = 0;
+  let lastRendered = "";
+
+  while (Date.now() < deadline) {
+    try {
+      const task = await fetchTaskStatus(taskId);
+      transientErrors = 0;
+      const rendered = formatTaskProgress(task, mode);
+      if (rendered !== lastRendered) {
+        onProgress(rendered, task);
+        lastRendered = rendered;
+      }
+
+      if (task.status === "completed") {
+        return task;
+      }
+      if (task.status === "failed") {
+        throw new Error(task.error || task.message || "\u5bfc\u51fa\u5931\u8d25");
+      }
+    } catch (err) {
+      transientErrors += 1;
+      if (transientErrors >= 5) {
+        throw err;
+      }
+      const retryMsg = `\u6b63\u5728\u67e5\u8be2\u672c\u5730\u4efb\u52a1\u8fdb\u5ea6\uff08\u91cd\u8bd5 ${transientErrors}/5\uff09...`;
+      if (retryMsg !== lastRendered) {
+        onProgress(retryMsg, null);
+        lastRendered = retryMsg;
+      }
+    }
+
+    await wait(BRIDGE_POLL_INTERVAL_MS);
+  }
+
+  throw new Error("\u672c\u5730\u540e\u53f0\u4efb\u52a1\u7b49\u5f85\u8d85\u65f6\uff0c\u8bf7\u7a0d\u540e\u68c0\u67e5\u8f93\u51fa\u76ee\u5f55\u6216\u4efb\u52a1\u65e5\u5fd7\u3002");
 }
 
 async function getHistory() {
@@ -275,25 +360,25 @@ async function runExport() {
   startBridgeBtn.disabled = true;
   openFolderBtn.style.display = "none";
   try {
-    log("检查当前标签页...");
+    log("\u68c0\u67e5\u5f53\u524d\u6807\u7b7e\u9875...");
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id || !tab.url || !isLinuxDoTopicUrl(tab.url)) {
-      throw new Error("当前页面不是 linux.do 主题帖。");
+      throw new Error("\u5f53\u524d\u9875\u9762\u4e0d\u662f linux.do \u4e3b\u9898\u5e16\u3002");
     }
 
     await ensureBridgeReady(true);
 
-    log("从当前页面读取 topic JSON（含分页拉取全部楼层）...");
+    log("\u4ece\u5f53\u524d\u9875\u9762\u8bfb\u53d6 topic JSON\uff08\u542b\u5206\u9875\u62c9\u53d6\u5168\u90e8\u697c\u5c42\uff09...");
     const [execResult] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: fetchTopicJsonInPage,
     });
     if (!execResult?.result?.topicJson) {
-      throw new Error("未获取到 topic JSON。");
+      throw new Error("\u672a\u83b7\u53d6\u5230 topic JSON\u3002");
     }
 
     const totalPosts = execResult.result.topicJson.post_stream?.posts?.length || 0;
-    log(`已获取 ${totalPosts} 楼，准备发送...`);
+    log(`\u5df2\u83b7\u53d6 ${totalPosts} \u697c\uff0c\u51c6\u5907\u53d1\u9001...`);
 
     const settings = await loadSettings();
     const profileKey = settings.pdfProfile;
@@ -303,7 +388,6 @@ async function runExport() {
     const postStartVal = document.getElementById("postStart").value.trim();
     const postEndVal = document.getElementById("postEnd").value.trim();
 
-    log(`发送到本地服务（${mode}，失败低频重试）...`);
     const payload = {
       source: "browser_extension",
       topic_url: execResult.result.topicUrl,
@@ -318,50 +402,106 @@ async function runExport() {
       index_sort_by: "updated_desc",
       index_only_with_pdf: false,
       pdf_config_path: settings.enablePdf ? pdfConfigPath : "configs/pdf.default.json",
+      async_task: true,
     };
     if (postStartVal) payload.post_start = parseInt(postStartVal, 10);
     if (postEndVal) payload.post_end = parseInt(postEndVal, 10);
-    const result = await postToBridgeWithRetry(payload, 3);
+
+    log(`\u53d1\u9001\u5230\u672c\u5730\u6865\uff08${mode}\uff09...\n\u8fdb\u5ea6\u67e5\u8be2\u4ec5\u8bbf\u95ee 127.0.0.1\uff0c\u4e0d\u4f1a\u989d\u5916\u8bf7\u6c42 linux.do\u3002`);
+    const accepted = await startAsyncImportWithRetry(payload, 3);
+
+    if (accepted.task_id) {
+      log(
+        [
+          "\u5df2\u8fdb\u5165\u672c\u5730\u540e\u53f0\u4efb\u52a1",
+          `Task ID: ${accepted.task_id}`,
+          `Mode: ${mode}`,
+          "\u8fdb\u5ea6\u67e5\u8be2\u4ec5\u8bbf\u95ee 127.0.0.1\uff0c\u4e0d\u4f1a\u989d\u5916\u8bf7\u6c42 linux.do\u3002",
+        ].join("\n")
+      );
+      const finalTask = await pollTaskUntilDone(accepted.task_id, mode, (message) => log(message));
+      const result = finalTask.result || {};
+
+      log(
+        [
+          "\u5bfc\u51fa\u5b8c\u6210",
+          `Topic ID: ${result.topic_id}`,
+          `Mode: ${mode}`,
+          `Markdown: ${result.markdown_path}`,
+          `PDF: ${result.pdf_path || "(\u672a\u751f\u6210)"}`,
+          `Index: ${result.index_path || "(\u672a\u66f4\u65b0)"}`,
+          `Task Log: ${result.task_log_path || "(\u672a\u8bb0\u5f55)"}`,
+        ].join("\n")
+      );
+
+      if (result.output_dir) {
+        openFolderBtn.style.display = "block";
+        openFolderBtn.onclick = async () => {
+          try {
+            const resp = await fetch(`${BRIDGE_OPEN_FOLDER_URL}?path=${encodeURIComponent(result.output_dir)}`);
+            const data = await resp.json();
+            if (!data.ok) {
+              log(`\u6253\u5f00\u76ee\u5f55\u5931\u8d25: ${data.error || data.message || "unknown"}`);
+            }
+          } catch (err) {
+            log(`\u6253\u5f00\u76ee\u5f55\u5931\u8d25: ${err.message}`);
+          }
+        };
+      }
+
+      await appendHistory({
+        time: new Date().toISOString(),
+        topicId: result.topic_id,
+        status: "success",
+        mode,
+        markdownPath: result.markdown_path,
+        pdfPath: result.pdf_path || "",
+        indexPath: result.index_path || "",
+        taskLogPath: result.task_log_path || "",
+        pdfProfile: profileKey,
+      });
+      return;
+    }
 
     log(
       [
-        "导出完成",
-        `Topic ID: ${result.topic_id}`,
+        "\u5bfc\u51fa\u5b8c\u6210",
+        `Topic ID: ${accepted.topic_id}`,
         `Mode: ${mode}`,
-        `Markdown: ${result.markdown_path}`,
-        `PDF: ${result.pdf_path || "(未生成)"}`,
-        `Index: ${result.index_path || "(未更新)"}`,
-        `Task Log: ${result.task_log_path || "(未记录)"}`,
+        `Markdown: ${accepted.markdown_path}`,
+        `PDF: ${accepted.pdf_path || "(\u672a\u751f\u6210)"}`,
+        `Index: ${accepted.index_path || "(\u672a\u66f4\u65b0)"}`,
+        `Task Log: ${accepted.task_log_path || "(\u672a\u8bb0\u5f55)"}`,
       ].join("\n")
     );
-    if (result.output_dir) {
+    if (accepted.output_dir) {
       openFolderBtn.style.display = "block";
       openFolderBtn.onclick = async () => {
         try {
-          const resp = await fetch(`${BRIDGE_OPEN_FOLDER_URL}?path=${encodeURIComponent(result.output_dir)}`);
+          const resp = await fetch(`${BRIDGE_OPEN_FOLDER_URL}?path=${encodeURIComponent(accepted.output_dir)}`);
           const data = await resp.json();
           if (!data.ok) {
-            log(`打开目录失败: ${data.error || data.message || "unknown"}`);
+            log(`\u6253\u5f00\u76ee\u5f55\u5931\u8d25: ${data.error || data.message || "unknown"}`);
           }
         } catch (err) {
-          log(`打开目录失败: ${err.message}`);
+          log(`\u6253\u5f00\u76ee\u5f55\u5931\u8d25: ${err.message}`);
         }
       };
     }
     await appendHistory({
       time: new Date().toISOString(),
-      topicId: result.topic_id,
+      topicId: accepted.topic_id,
       status: "success",
       mode,
-      markdownPath: result.markdown_path,
-      pdfPath: result.pdf_path || "",
-      indexPath: result.index_path || "",
-      taskLogPath: result.task_log_path || "",
+      markdownPath: accepted.markdown_path,
+      pdfPath: accepted.pdf_path || "",
+      indexPath: accepted.index_path || "",
+      taskLogPath: accepted.task_log_path || "",
       pdfProfile: profileKey,
     });
   } catch (err) {
     const message = err?.message || String(err);
-    log(`失败: ${message}`);
+    log(`\u5931\u8d25: ${message}`);
     await appendHistory({
       time: new Date().toISOString(),
       topicId: "",
