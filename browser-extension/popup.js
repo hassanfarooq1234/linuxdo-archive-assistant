@@ -1,8 +1,12 @@
 const BRIDGE_URL = "http://127.0.0.1:17805/import-topic";
 const BRIDGE_OPEN_FOLDER_URL = "http://127.0.0.1:17805/open-folder";
+const BRIDGE_HEALTH_URL = "http://127.0.0.1:17805/health";
+const BRIDGE_PROTOCOL_URL = "linuxdo-archive://start";
 const HISTORY_KEY = "challenge05_export_history";
 const SETTINGS_KEY = "challenge05_export_settings";
 const MAX_HISTORY = 12;
+const BRIDGE_START_TIMEOUT_MS = 15000;
+const BRIDGE_POLL_INTERVAL_MS = 1000;
 
 const PDF_PROFILE_MAP = {
   full: "configs/pdf.ctf-full.json",
@@ -15,12 +19,17 @@ const DEFAULT_SETTINGS = {
 };
 
 const exportBtn = document.getElementById("exportBtn");
+const startBridgeBtn = document.getElementById("startBridgeBtn");
 const openFolderBtn = document.getElementById("openFolderBtn");
 const logEl = document.getElementById("log");
 const historyListEl = document.getElementById("historyList");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 const enablePdfEl = document.getElementById("enablePdf");
 const pdfProfileEl = document.getElementById("pdfProfile");
+
+function setStartBridgeVisible(visible) {
+  startBridgeBtn.style.display = visible ? "block" : "none";
+}
 
 function log(msg) {
   logEl.textContent = msg;
@@ -78,6 +87,82 @@ async function fetchTopicJsonInPage() {
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function checkBridgeHealth(timeoutMs = 1500) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(BRIDGE_HEALTH_URL, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      return { ok: false, reason: `HTTP ${resp.status}` };
+    }
+    const data = await resp.json();
+    return { ok: !!data.ok, data };
+  } catch (err) {
+    return { ok: false, reason: err?.message || String(err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function launchBridgeProtocol() {
+  const link = document.createElement("a");
+  link.href = BRIDGE_PROTOCOL_URL;
+  link.target = "_blank";
+  link.rel = "noreferrer noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+async function waitForBridgeReady(timeoutMs = BRIDGE_START_TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const health = await checkBridgeHealth();
+    if (health.ok) {
+      setStartBridgeVisible(false);
+      return health;
+    }
+    await wait(BRIDGE_POLL_INTERVAL_MS);
+  }
+  throw new Error("本地桥启动超时，请手动运行启动脚本。");
+}
+
+async function ensureBridgeReady(autoLaunch = false) {
+  const health = await checkBridgeHealth();
+  if (health.ok) {
+    setStartBridgeVisible(false);
+    return health;
+  }
+
+  setStartBridgeVisible(true);
+  if (!autoLaunch) {
+    throw new Error("本地桥未启动，请点击“启动本地桥”或手动运行启动脚本。");
+  }
+
+  log("未检测到本地桥，正在尝试自动启动...");
+  launchBridgeProtocol();
+  return waitForBridgeReady();
+}
+
+async function refreshBridgeStatus() {
+  const health = await checkBridgeHealth();
+  if (health.ok) {
+    setStartBridgeVisible(false);
+    if (logEl.textContent === "准备就绪") {
+      log("准备就绪（本地桥在线）");
+    }
+    return;
+  }
+  setStartBridgeVisible(true);
+  if (!logEl.textContent || logEl.textContent === "准备就绪") {
+    log("本地桥未启动，可先点“启动本地桥”再导出。");
+  }
 }
 
 function escapeHtml(value) {
@@ -187,6 +272,7 @@ function bindSettingEvents() {
 
 async function runExport() {
   exportBtn.disabled = true;
+  startBridgeBtn.disabled = true;
   openFolderBtn.style.display = "none";
   try {
     log("检查当前标签页...");
@@ -194,6 +280,8 @@ async function runExport() {
     if (!tab?.id || !tab.url || !isLinuxDoTopicUrl(tab.url)) {
       throw new Error("当前页面不是 linux.do 主题帖。");
     }
+
+    await ensureBridgeReady(true);
 
     log("从当前页面读取 topic JSON（含分页拉取全部楼层）...");
     const [execResult] = await chrome.scripting.executeScript({
@@ -285,6 +373,21 @@ async function runExport() {
     });
   } finally {
     exportBtn.disabled = false;
+    startBridgeBtn.disabled = false;
+  }
+}
+
+async function startBridgeManually() {
+  startBridgeBtn.disabled = true;
+  try {
+    log("正在尝试启动本地桥...");
+    launchBridgeProtocol();
+    await waitForBridgeReady();
+    log("本地桥已启动，现在可以导出了。");
+  } catch (err) {
+    log(`启动失败: ${err?.message || String(err)}`);
+  } finally {
+    startBridgeBtn.disabled = false;
   }
 }
 
@@ -294,10 +397,14 @@ async function clearHistory() {
 }
 
 exportBtn.addEventListener("click", runExport);
+startBridgeBtn.addEventListener("click", startBridgeManually);
 clearHistoryBtn.addEventListener("click", clearHistory);
 
 Promise.all([getHistory().then(renderHistory), loadSettings()])
-  .then(bindSettingEvents)
+  .then(async () => {
+    bindSettingEvents();
+    await refreshBridgeStatus();
+  })
   .catch(() => {
     renderHistory([]);
   });
