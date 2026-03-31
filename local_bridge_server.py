@@ -20,7 +20,13 @@ from urllib.parse import parse_qs, urlparse
 from archive_core import archive_topic_from_data, infer_topic_id_from_json
 
 
-ROOT_DIR = Path(__file__).resolve().parent
+def get_app_root_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+ROOT_DIR = get_app_root_dir()
 DEFAULT_OUTPUT_ROOT = ROOT_DIR / "cases"
 DEFAULT_PDF_CONFIG = ROOT_DIR / "configs" / "pdf.default.json"
 ALLOWED_TOPIC_HOSTS = {"linux.do"}

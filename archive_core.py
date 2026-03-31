@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 from typing import Any, Callable
 from urllib.parse import urljoin, urlparse, urlsplit
 
@@ -19,7 +20,13 @@ from lxml import html
 from playwright.sync_api import sync_playwright
 
 
-ROOT_DIR = Path(__file__).resolve().parent
+def get_app_root_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+ROOT_DIR = get_app_root_dir()
 DEFAULT_TASK_LOG_PATH = ROOT_DIR / "logs" / "archive_tasks.jsonl"
 
 USER_AGENT = (

@@ -32,6 +32,23 @@
 - 导出完成后可直接打开结果目录
 - 本地桥限制为单任务串行，降低误触和风控风险
 
+## 推荐发布方式
+
+建议采用双轨制：
+
+- 源码仓库：给开发者与跨平台用户
+- Windows 便携版：给普通 Windows 用户
+
+Windows 便携版的目标是：
+
+- 不要求用户安装 Python / uv
+- 通过 `linuxdo-archive-bridge.exe` 提供本地桥
+- 保留 `browser-extension/` 供浏览器加载
+- 配套双击脚本与使用说明
+
+便携版构建脚本：`scripts/build_windows_portable.ps1`
+便携版说明：`docs/windows-portable-guide.md`
+
 ## 目录结构
 
 - `archive_core.py`：归档核心逻辑
