@@ -6,17 +6,19 @@
     <title>Linux.do 归档助手</title>
     <style>
       :root {
-        color-scheme: light;
-        --bg: #f3f4f6;
-        --panel: #ffffff;
-        --border: #d1d5db;
-        --text: #111827;
-        --muted: #6b7280;
-        --primary: #111827;
-        --primary-soft: #e5e7eb;
-        --success: #047857;
-        --warning: #b45309;
-        --danger: #b91c1c;
+        color-scheme: dark;
+        --bg: #090A0C;
+        --panel: rgba(255, 255, 255, 0.03);
+        --border: rgba(255, 255, 255, 0.08);
+        --border-glow: rgba(212, 175, 55, 0.3); /* Gold glow for hover */
+        --text: #FFFFFF;
+        --muted: #8A8F98;
+        --primary: linear-gradient(135deg, #ECC371 0%, #B78A4B 100%);
+        --primary-hover: linear-gradient(135deg, #FDF0B5 0%, #D4AF37 100%);
+        --success: #34D399;
+        --warning: #FBBF24;
+        --danger: #F87171;
+        --surface: rgba(255, 255, 255, 0.05);
       }
 
       * {
@@ -25,23 +27,30 @@
 
       body {
         margin: 0;
-        font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
         background: var(--bg);
         color: var(--text);
+        letter-spacing: 0.01em;
+        -webkit-font-smoothing: antialiased;
       }
 
       .wrap {
         width: 360px;
-        padding: 14px;
+        padding: 16px;
       }
 
       .header {
-        margin-bottom: 10px;
+        margin-bottom: 16px;
       }
 
       h1 {
-        margin: 0 0 6px;
+        margin: 0 0 4px;
         font-size: 16px;
+        font-weight: 600;
+        background: linear-gradient(180deg, #FFFFFF 0%, #A1A1AA 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
       }
 
       .sub {
@@ -53,9 +62,11 @@
       .card {
         background: var(--panel);
         border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 10px;
-        margin-bottom: 10px;
+        border-radius: 12px;
+        padding: 14px;
+        margin-bottom: 12px;
+        box-shadow: 0 4px 24px -6px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        backdrop-filter: blur(10px);
       }
 
       .status-row,
@@ -83,33 +94,38 @@
       .label,
       .meta-label {
         font-size: 12px;
-        color: #374151;
+        color: #E4E4E7;
+        font-weight: 500;
       }
 
       .badge {
         display: inline-flex;
         align-items: center;
-        border-radius: 999px;
+        border-radius: 6px;
         padding: 2px 8px;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
-        background: var(--primary-soft);
-        color: #1f2937;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
       }
 
       .badge.online {
-        background: #d1fae5;
         color: var(--success);
+        border-color: rgba(52, 211, 153, 0.2);
+        box-shadow: 0 0 10px rgba(52, 211, 153, 0.1);
       }
 
       .badge.offline {
-        background: #fee2e2;
         color: var(--danger);
+        border-color: rgba(248, 113, 113, 0.2);
+        box-shadow: 0 0 10px rgba(248, 113, 113, 0.1);
       }
 
       .badge.busy {
-        background: #fef3c7;
         color: var(--warning);
+        border-color: rgba(251, 191, 36, 0.2);
+        box-shadow: 0 0 10px rgba(251, 191, 36, 0.1);
       }
 
       .details {
@@ -119,18 +135,26 @@
       .details summary {
         cursor: pointer;
         font-size: 12px;
-        color: #374151;
+        font-weight: 500;
+        color: #E4E4E7;
         user-select: none;
+        transition: color 0.2s;
+      }
+
+      .details summary:hover {
+        color: #ECC371; /* Gold hover */
       }
 
       .advanced {
-        margin-top: 10px;
+        margin-top: 12px;
         display: grid;
-        gap: 8px;
+        gap: 10px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
       }
 
       .range-row {
-        gap: 8px;
+        gap: 10px;
       }
 
       .range-field {
@@ -139,23 +163,40 @@
 
       .range-field label {
         display: block;
-        margin-bottom: 4px;
-        font-size: 12px;
-        color: #374151;
+        margin-bottom: 6px;
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
       }
 
-      input[type="number"] {
+      input[type="number"], input[type="text"] {
         width: 100%;
         border: 1px solid var(--border);
         border-radius: 8px;
-        padding: 8px 10px;
+        padding: 8px 12px;
         font-size: 12px;
-        background: #fff;
+        background: rgba(0, 0, 0, 0.2);
         color: var(--text);
+        transition: all 0.2s;
+      }
+      
+      input[type="checkbox"] {
+        accent-color: #D4AF37;
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: rgba(212, 175, 55, 0.5); /* Gold glow */
+        box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.2);
+        background: rgba(0, 0, 0, 0.4);
       }
 
       .help {
-        font-size: 12px;
+        font-size: 11px;
         color: var(--muted);
         line-height: 1.5;
       }
@@ -164,64 +205,102 @@
         width: 100%;
         border: 0;
         border-radius: 8px;
-        padding: 10px 12px;
+        padding: 12px 14px;
         font-size: 13px;
+        font-weight: 600;
         cursor: pointer;
+        transition: all 0.2s ease;
       }
 
       .primary-btn {
         background: var(--primary);
-        color: #fff;
+        color: #000000;
+        text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+        box-shadow: 0 2px 10px rgba(212, 175, 55, 0.2);
+      }
+
+      .primary-btn:hover:not(:disabled) {
+        background: var(--primary-hover);
+        box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4);
+        transform: translateY(-1px);
       }
 
       .secondary-btn {
         margin-top: 8px;
-        background: #fff;
+        background: var(--surface);
         border: 1px solid var(--border);
         color: var(--text);
       }
 
+      .secondary-btn:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.15);
+      }
+
       button:disabled,
       input:disabled {
-        opacity: 0.6;
+        opacity: 0.4;
         cursor: not-allowed;
+        transform: none;
       }
 
       .progress-wrap {
-        margin: 10px 0 8px;
+        margin: 12px 0 8px;
       }
 
       .progress-track {
         width: 100%;
-        height: 10px;
+        height: 6px;
         border-radius: 999px;
-        background: #e5e7eb;
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.05);
         overflow: hidden;
       }
 
       .progress-bar {
         height: 100%;
         width: 0%;
-        background: linear-gradient(90deg, #111827, #4b5563);
-        transition: width 0.25s ease;
+        background: var(--primary);
+        box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
       .status-title {
         font-size: 13px;
         font-weight: 600;
         margin-bottom: 4px;
+        color: #FFFFFF;
       }
 
       .status-meta,
       .log {
-        font-size: 12px;
+        font-size: 11px;
         color: var(--muted);
         line-height: 1.6;
         white-space: pre-wrap;
       }
 
       .log {
-        margin-top: 8px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+        max-height: 80px;
+        overflow-y: auto;
+      }
+      
+      .log::-webkit-scrollbar {
+        width: 4px;
+      }
+      .log::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 4px;
+      }
+      .log::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 4px;
+      }
+      .log::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.25);
       }
     </style>
   </head>
