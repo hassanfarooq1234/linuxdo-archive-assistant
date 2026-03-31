@@ -46,6 +46,11 @@
       "type": "boolean",
       "default": true
     },
+    "async_task": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, local bridge accepts and runs import as background task"
+    },
     "pdf_config_path": {
       "type": "string",
       "description": "Path to PDF style config JSON (inside challenge-05 directory)"
@@ -87,6 +92,16 @@
     "task_log_path": {
       "type": "string",
       "description": "Path to jsonl task log file (inside workspace_root)"
+    },
+    "post_start": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional inclusive start post_number for range export"
+    },
+    "post_end": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional inclusive end post_number for range export"
     }
   },
   "additionalProperties": false

@@ -159,7 +159,7 @@ async function ensureBridgeReady() {
   throw new Error("本地桥未启动，请先运行 uv run python .\\local_bridge_server.py");
 }
 
-async function fetchTopicJsonInPage() {
+async function fetchTopicJsonInPage(postStart, postEnd) {
   const pageUrl = new URL(window.location.href);
   const match = pageUrl.pathname.match(/^\/t\/(?:([^/]+)\/)?(\d+)(?:\/.*)?$/);
   if (!match) {
@@ -178,8 +178,20 @@ async function fetchTopicJsonInPage() {
 
   const topicJson = JSON.parse(responseText);
   const stream = topicJson.post_stream?.stream || [];
+  const totalAvailablePosts = stream.length;
+  const normalizedStart = Number.isInteger(postStart) && postStart > 0 ? postStart : 1;
+  const normalizedEnd = Number.isInteger(postEnd) && postEnd > 0 ? postEnd : totalAvailablePosts;
+  const targetStart = Math.max(1, normalizedStart);
+  const targetEnd = Math.max(targetStart, Math.min(normalizedEnd, totalAvailablePosts));
+  const targetIds = stream.slice(targetStart - 1, targetEnd);
+  const targetIdSet = new Set(targetIds);
+
+  if (targetIds.length === 0) {
+    throw new Error(`目标楼层范围无有效内容：${targetStart}-${targetEnd}`);
+  }
+
   const loadedIds = new Set((topicJson.post_stream?.posts || []).map((post) => post.id));
-  const missingIds = stream.filter((id) => !loadedIds.has(id));
+  const missingIds = targetIds.filter((id) => !loadedIds.has(id));
   const batchSize = 20;
 
   for (let index = 0; index < missingIds.length; index += batchSize) {
@@ -198,9 +210,21 @@ async function fetchTopicJsonInPage() {
     }
   }
 
+  topicJson.post_stream.posts = (topicJson.post_stream?.posts || [])
+    .filter((post) => targetIdSet.has(post.id))
+    .sort((left, right) => (left.post_number || 0) - (right.post_number || 0));
+
   return {
     topicUrl: window.location.href,
     topicJson,
+    fetchStats: {
+      requestedStart: targetStart,
+      requestedEnd: targetEnd,
+      requestedTotal: targetIds.length,
+      missingBeforeFetch: missingIds.length,
+      loadedAfterFetch: topicJson.post_stream.posts.length,
+      totalAvailablePosts,
+    },
   };
 }
 
@@ -335,6 +359,7 @@ async function runExport() {
 
   try {
     await saveOptions();
+    const { postStart, postEnd } = readPostRange();
     setProgress(5);
     setStatus("检查当前页面", "确认你现在打开的是 Linux.do 帖子页。", "");
 
@@ -349,22 +374,31 @@ async function runExport() {
     await refreshBridgeStatus();
 
     setProgress(16);
-    setStatus("抓取帖子 JSON", "正在读取当前帖子并补齐分页楼层，楼层多时会稍慢。", "");
+    setStatus(
+      "抓取帖子 JSON",
+      postStart || postEnd
+        ? `正在按范围抓取楼层 ${postStart || 1} - ${postEnd || "最后一楼"}，只补目标范围内缺失的楼。`
+        : "正在读取当前帖子并补齐分页楼层，楼层多时会稍慢。",
+      "",
+    );
     const [execResult] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: fetchTopicJsonInPage,
+      args: [postStart, postEnd],
     });
     if (!execResult?.result?.topicJson) {
       throw new Error("未获取到帖子 JSON。可能页面尚未完全加载。");
     }
 
-    const { postStart, postEnd } = readPostRange();
+    const fetchStats = execResult.result.fetchStats || null;
     const totalPosts = execResult.result.topicJson.post_stream?.posts?.length || 0;
     const modeLabel = enablePdfEl.checked ? "Markdown + PDF" : "仅 Markdown";
     setProgress(22);
     setStatus(
       "提交导出任务",
-      `已抓到 ${totalPosts} 楼，准备交给本地桥处理。`,
+      fetchStats
+        ? `已抓到目标范围 ${fetchStats.loadedAfterFetch}/${fetchStats.requestedTotal} 楼，准备交给本地桥处理。`
+        : `已抓到 ${totalPosts} 楼，准备交给本地桥处理。`,
       `导出模式：${modeLabel}${postStart || postEnd ? `\n楼层范围：${postStart || 1} - ${postEnd || "最后一楼"}` : "\n楼层范围：整帖"}`,
     );
 
