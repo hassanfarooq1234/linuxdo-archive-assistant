@@ -2,11 +2,9 @@ const BRIDGE_URL = "http://127.0.0.1:17805/import-topic";
 const BRIDGE_OPEN_FOLDER_URL = "http://127.0.0.1:17805/open-folder";
 const BRIDGE_HEALTH_URL = "http://127.0.0.1:17805/health";
 const BRIDGE_TASK_STATUS_URL = "http://127.0.0.1:17805/task-status";
-const BRIDGE_PROTOCOL_URL = "linuxdo-archive://start";
 const HISTORY_KEY = "challenge05_export_history";
 const SETTINGS_KEY = "challenge05_export_settings";
 const MAX_HISTORY = 12;
-const BRIDGE_START_TIMEOUT_MS = 15000;
 const BRIDGE_POLL_INTERVAL_MS = 1000;
 const TASK_POLL_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -21,7 +19,7 @@ const DEFAULT_SETTINGS = {
 };
 
 const exportBtn = document.getElementById("exportBtn");
-const startBridgeBtn = document.getElementById("startBridgeBtn");
+const startBridgeHint = document.getElementById("startBridgeHint");
 const openFolderBtn = document.getElementById("openFolderBtn");
 const logEl = document.getElementById("log");
 const historyListEl = document.getElementById("historyList");
@@ -30,7 +28,7 @@ const enablePdfEl = document.getElementById("enablePdf");
 const pdfProfileEl = document.getElementById("pdfProfile");
 
 function setStartBridgeVisible(visible) {
-  startBridgeBtn.style.display = visible ? "block" : "none";
+  startBridgeHint.style.display = visible ? "block" : "none";
 }
 
 function log(msg) {
@@ -111,31 +109,7 @@ async function checkBridgeHealth(timeoutMs = 1500) {
   }
 }
 
-function launchBridgeProtocol() {
-  const link = document.createElement("a");
-  link.href = BRIDGE_PROTOCOL_URL;
-  link.target = "_blank";
-  link.rel = "noreferrer noopener";
-  link.style.display = "none";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-}
-
-async function waitForBridgeReady(timeoutMs = BRIDGE_START_TIMEOUT_MS) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const health = await checkBridgeHealth();
-    if (health.ok) {
-      setStartBridgeVisible(false);
-      return health;
-    }
-    await wait(BRIDGE_POLL_INTERVAL_MS);
-  }
-  throw new Error("本地桥启动超时，请手动运行启动脚本。");
-}
-
-async function ensureBridgeReady(autoLaunch = false) {
+async function ensureBridgeReady() {
   const health = await checkBridgeHealth();
   if (health.ok) {
     setStartBridgeVisible(false);
@@ -143,13 +117,7 @@ async function ensureBridgeReady(autoLaunch = false) {
   }
 
   setStartBridgeVisible(true);
-  if (!autoLaunch) {
-    throw new Error("本地桥未启动，请点击“启动本地桥”或手动运行启动脚本。");
-  }
-
-  log("未检测到本地桥，正在尝试自动启动...");
-  launchBridgeProtocol();
-  return waitForBridgeReady();
+  throw new Error("Bridge not running, please start it manually: uv run python local_bridge_server.py");
 }
 
 async function refreshBridgeStatus() {
@@ -357,7 +325,6 @@ function bindSettingEvents() {
 
 async function runExport() {
   exportBtn.disabled = true;
-  startBridgeBtn.disabled = true;
   openFolderBtn.style.display = "none";
   try {
     log("\u68c0\u67e5\u5f53\u524d\u6807\u7b7e\u9875...");
@@ -366,7 +333,7 @@ async function runExport() {
       throw new Error("\u5f53\u524d\u9875\u9762\u4e0d\u662f linux.do \u4e3b\u9898\u5e16\u3002");
     }
 
-    await ensureBridgeReady(true);
+    await ensureBridgeReady();
 
     log("\u4ece\u5f53\u524d\u9875\u9762\u8bfb\u53d6 topic JSON\uff08\u542b\u5206\u9875\u62c9\u53d6\u5168\u90e8\u697c\u5c42\uff09...");
     const [execResult] = await chrome.scripting.executeScript({
@@ -513,21 +480,6 @@ async function runExport() {
     });
   } finally {
     exportBtn.disabled = false;
-    startBridgeBtn.disabled = false;
-  }
-}
-
-async function startBridgeManually() {
-  startBridgeBtn.disabled = true;
-  try {
-    log("正在尝试启动本地桥...");
-    launchBridgeProtocol();
-    await waitForBridgeReady();
-    log("本地桥已启动，现在可以导出了。");
-  } catch (err) {
-    log(`启动失败: ${err?.message || String(err)}`);
-  } finally {
-    startBridgeBtn.disabled = false;
   }
 }
 
@@ -537,7 +489,6 @@ async function clearHistory() {
 }
 
 exportBtn.addEventListener("click", runExport);
-startBridgeBtn.addEventListener("click", startBridgeManually);
 clearHistoryBtn.addEventListener("click", clearHistory);
 
 Promise.all([getHistory().then(renderHistory), loadSettings()])
