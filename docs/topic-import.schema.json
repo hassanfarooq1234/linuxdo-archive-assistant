@@ -3,7 +3,9 @@
   "$id": "https://local.challenge-05-linuxdo-archive/topic-import.schema.json",
   "title": "TopicImportRequest",
   "type": "object",
-  "required": ["topic_json"],
+  "required": [
+    "topic_json"
+  ],
   "properties": {
     "source": {
       "type": "string",
@@ -62,7 +64,12 @@
     },
     "index_sort_by": {
       "type": "string",
-      "enum": ["updated_desc", "updated_asc", "topic_id_desc", "topic_id_asc"],
+      "enum": [
+        "updated_desc",
+        "updated_asc",
+        "topic_id_desc",
+        "topic_id_asc"
+      ],
       "default": "updated_desc"
     },
     "index_only_with_pdf": {
@@ -80,21 +87,6 @@
     "task_log_path": {
       "type": "string",
       "description": "Path to jsonl task log file (inside workspace_root)"
-    },
-    "async_task": {
-      "type": "boolean",
-      "default": false,
-      "description": "If true, bridge returns 202 + task_id and client polls /task-status locally"
-    },
-    "post_start": {
-      "type": "integer",
-      "minimum": 1,
-      "description": "Start post number (inclusive). Omit for beginning."
-    },
-    "post_end": {
-      "type": "integer",
-      "minimum": 1,
-      "description": "End post number (inclusive). Omit for all remaining."
     }
   },
   "additionalProperties": false

@@ -13,13 +13,8 @@
   - `docs/topic-import.schema.json`
 - 已增加：
   - 默认 PDF 模板：`configs/pdf.default.json`
-  - PDF profile：`configs/pdf.ctf-full.json`、`configs/pdf.ctf-brief.json`
-  - `ctf-full` 模板支持封面页
-  - 插件端本地历史记录与低频重试
   - 插件端自动分页拉取全部楼层（不止前 20 楼）
   - 图片下载低频重试参数（CLI/Bridge）
-  - 楼层范围导出（CLI/Bridge/Plugin）
-  - 导出后“打开输出目录”按钮（Plugin + Bridge `/open-folder`）
   - 自动汇总索引：`cases/index.md`
   - 索引排序/过滤参数与任务日志：`logs/archive_tasks.jsonl`
 - 已验证：
@@ -39,7 +34,6 @@
 ```powershell
 cd challenge-05-linuxdo-archive
 uv sync
-uv run camoufox fetch
 uv run playwright install chromium
 ```
 
@@ -95,7 +89,6 @@ curl http://127.0.0.1:17805/health
 
 ## 5. 插件调用约定
 - 插件请求地址：`POST http://127.0.0.1:17805/import-topic`
-- 打开输出目录：`GET http://127.0.0.1:17805/open-folder?path=...`
 - 请求 Schema：`docs/topic-import.schema.json`
 - 默认字段：
   - `output_root="cases"`
@@ -109,7 +102,6 @@ curl http://127.0.0.1:17805/health
   - `index_sort_by="updated_desc"`
   - `index_only_with_pdf=false`
   - `enable_task_log=true`
-  - `post_start` / `post_end`：可选楼层范围
 
 ## 6. 下阶段建议（待办）
 - 增加 `--no-download-images` 的后补下载工具。
