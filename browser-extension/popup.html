@@ -78,44 +78,6 @@
         background: #fff;
         color: #111827;
       }
-      .history-head {
-        margin-top: 10px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .history-head strong {
-        font-size: 12px;
-      }
-      .clear-btn {
-        border: 1px solid #d1d5db;
-        background: #fff;
-        color: #374151;
-        border-radius: 6px;
-        padding: 2px 8px;
-        font-size: 11px;
-        cursor: pointer;
-      }
-      .history {
-        margin-top: 6px;
-        background: #fff;
-        border: 1px solid #d1d5db;
-        border-radius: 8px;
-        padding: 8px;
-        font-size: 12px;
-        max-height: 140px;
-        overflow: auto;
-      }
-      .history-item {
-        padding: 6px 0;
-        border-bottom: 1px dashed #e5e7eb;
-      }
-      .history-item:last-child {
-        border-bottom: 0;
-      }
-      .history-empty {
-        color: #6b7280;
-      }
     </style>
   </head>
   <body>
@@ -127,32 +89,10 @@
           <label for="enablePdf">导出 PDF</label>
           <input id="enablePdf" type="checkbox" checked />
         </div>
-        <div class="opt-row">
-          <label for="pdfProfile">PDF 模板</label>
-          <select id="pdfProfile">
-            <option value="full">ctf-full</option>
-            <option value="brief">ctf-brief</option>
-          </select>
-        </div>
-        <div class="opt-row">
-          <label>楼层范围</label>
-          <span style="display:flex;align-items:center;gap:4px;">
-            <input id="postStart" type="number" min="1" placeholder="起始" style="width:52px;font-size:12px;border:1px solid #d1d5db;border-radius:6px;padding:4px 6px;" />
-            <span style="font-size:12px;">—</span>
-            <input id="postEnd" type="number" min="1" placeholder="结束" style="width:52px;font-size:12px;border:1px solid #d1d5db;border-radius:6px;padding:4px 6px;" />
-          </span>
-        </div>
-        <div style="font-size:11px;color:#6b7280;margin-top:2px;">留空 = 全部楼层；仅填起始 = 从该楼到末尾</div>
       </div>
       <button id="exportBtn">导出当前帖（JSON → MD+PDF）</button>
       <div id="startBridgeHint" class="hint" style="display:none;margin-top:6px;">Bridge offline. Run: uv run python local_bridge_server.py</div>
-      <button id="openFolderBtn" style="display:none;margin-top:6px;background:#374151;">打开输出目录</button>
       <pre id="log">准备就绪</pre>
-      <div class="history-head">
-        <strong>最近导出记录</strong>
-        <button class="clear-btn" id="clearHistoryBtn" type="button">清空</button>
-      </div>
-      <div class="history" id="historyList"></div>
     </div>
     <script src="popup.js"></script>
   </body>
