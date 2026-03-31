@@ -4,7 +4,6 @@ $root = Split-Path -Parent $PSScriptRoot
 $dist = Join-Path $root 'dist'
 $build = Join-Path $root 'build'
 $release = Join-Path $dist 'windows-portable'
-$bridgeExe = Join-Path $release 'linuxdo-archive-bridge.exe'
 
 Set-Location $root
 
@@ -22,7 +21,7 @@ Write-Host '[4/5] Copying extension and docs...'
 Copy-Item -Recurse -Force .\browser-extension (Join-Path $release 'browser-extension')
 Copy-Item -Recurse -Force .\configs (Join-Path $release 'configs')
 Copy-Item -Force .\README.md (Join-Path $release 'README.md')
-Copy-Item -Force .\docs\windows-portable-guide.md (Join-Path $release '使用说明-便携版.md')
+Copy-Item -Force .\docs\windows-portable-guide.md (Join-Path $release 'WINDOWS-PORTABLE-GUIDE.md')
 
 $launchStart = @(
   '@echo off',
@@ -52,11 +51,10 @@ $openOut = @(
   'start "" explorer.exe "%~dp0workspace\cases"'
 )
 
-Set-Content -LiteralPath (Join-Path $release '01-启动本地桥.cmd') -Value $launchStart -Encoding Ascii
-Set-Content -LiteralPath (Join-Path $release '02-停止本地桥.cmd') -Value $launchStop -Encoding Ascii
-Set-Content -LiteralPath (Join-Path $release '03-打开扩展目录.cmd') -Value $openExt -Encoding Ascii
-Set-Content -LiteralPath (Join-Path $release '04-打开输出目录.cmd') -Value $openOut -Encoding Ascii
+Set-Content -LiteralPath (Join-Path $release '01-start-bridge.cmd') -Value $launchStart -Encoding Ascii
+Set-Content -LiteralPath (Join-Path $release '02-stop-bridge.cmd') -Value $launchStop -Encoding Ascii
+Set-Content -LiteralPath (Join-Path $release '03-open-extension-folder.cmd') -Value $openExt -Encoding Ascii
+Set-Content -LiteralPath (Join-Path $release '04-open-output-folder.cmd') -Value $openOut -Encoding Ascii
 
 Write-Host '[5/5] Portable bundle ready:'
 Write-Host $release
-

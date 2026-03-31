@@ -4,3 +4,5 @@ __pycache__/
 cases/
 logs/
 bridge-test.log
+build/
+dist/

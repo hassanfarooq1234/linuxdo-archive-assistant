@@ -2,15 +2,16 @@ from pathlib import Path
 
 
 project_root = Path.cwd()
+entry_script = project_root / 'local_bridge_server.py'
 
 
 a = Analysis(
-    ['local_bridge_server.py'],
+    [str(entry_script)],
     pathex=[str(project_root)],
     binaries=[],
     datas=[
-        ('configs', 'configs'),
-        ('README.md', '.'),
+        (str(project_root / 'configs'), 'configs'),
+        (str(project_root / 'README.md'), '.'),
     ],
     hiddenimports=['markdown', 'lxml', 'playwright', 'requests'],
     hookspath=[],
@@ -39,4 +40,3 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
-
