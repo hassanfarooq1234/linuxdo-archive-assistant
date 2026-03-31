@@ -539,7 +539,7 @@ def render_pdf_from_markdown(
     pdf_config_path: Path | None = None,
     topic_id: str | None = None,
     topic_url: str | None = None,
-) -> Path:
+) -> tuple[Path, Path]:
     style = resolve_pdf_style(pdf_style=pdf_style, pdf_config_path=pdf_config_path)
     md_text = markdown_path.read_text(encoding="utf-8")
     html_content = markdown_to_html(
@@ -551,6 +551,7 @@ def render_pdf_from_markdown(
     )
     html_path = markdown_path.with_suffix(".html")
     html_path.write_text(html_content, encoding="utf-8")
+    temp_pdf_path = pdf_path.with_name(f"{pdf_path.stem}.tmp{pdf_path.suffix}")
 
     file_url = html_path.resolve().as_uri()
     page_style = style.get("page", {})
@@ -559,7 +560,7 @@ def render_pdf_from_markdown(
         page = browser.new_page()
         page.goto(file_url, wait_until="networkidle")
         page.pdf(
-            path=str(pdf_path),
+            path=str(temp_pdf_path),
             format=str(page_style.get("format", "A4")),
             print_background=bool(page_style.get("print_background", True)),
             margin={
@@ -574,9 +575,17 @@ def render_pdf_from_markdown(
         )
         browser.close()
 
+    final_pdf_path = pdf_path
+    try:
+        temp_pdf_path.replace(pdf_path)
+    except PermissionError:
+        fallback_suffix = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        final_pdf_path = pdf_path.with_name(f"{pdf_path.stem}.{fallback_suffix}{pdf_path.suffix}")
+        temp_pdf_path.replace(final_pdf_path)
+
     if not html_keep:
         html_path.unlink(missing_ok=True)
-    return html_path
+    return html_path, final_pdf_path
 
 
 def infer_topic_id_from_json(topic_data: dict[str, Any], fallback_name: str = "") -> str:
@@ -755,7 +764,7 @@ def archive_topic_from_data(
         if generate_pdf:
             emit_progress(progress_callback, stage="generating_pdf", message="正在生成 PDF，请稍候...")
             pdf_path = output_dir / f"topic_{final_topic_id}.pdf"
-            html_path = render_pdf_from_markdown(
+            html_path, pdf_path = render_pdf_from_markdown(
                 markdown_path=markdown_path,
                 pdf_path=pdf_path,
                 title=topic_data.get("title", f"topic_{final_topic_id}"),
