@@ -9,9 +9,6 @@ from pathlib import Path
 from archive_core import (
     archive_topic_from_data,
     archive_topic_from_json_file,
-    build_topic_json_url,
-    fetch_topic_json,
-    parse_topic_id,
 )
 
 
@@ -106,8 +103,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not args.topic_url and not args.input_json:
-        parser.error("either topic_url or --input-json is required")
+    if not args.input_json:
+        parser.error("--input-json is required")
 
     output_dir = Path(args.output_dir).resolve()
     pdf_config_path = Path(args.pdf_config).resolve() if args.pdf_config else None
@@ -134,32 +131,6 @@ def main() -> None:
             post_start=args.post_start,
             post_end=args.post_end,
         )
-    else:
-        topic_url = args.topic_url.strip()
-        topic_id = parse_topic_id(topic_url)
-        json_url = build_topic_json_url(topic_url)
-        topic_data = fetch_topic_json(topic_url=topic_url, json_url=json_url)
-        result = archive_topic_from_data(
-            topic_data=topic_data,
-            topic_url=topic_url,
-            output_dir=output_dir,
-            topic_id=topic_id,
-            download_images=not args.no_download_images,
-            image_retry_count=max(args.image_retry_count, 0),
-            image_retry_delay_seconds=max(args.image_retry_delay, 0.1),
-            generate_pdf=args.pdf,
-            keep_html_for_pdf=not args.no_keep_html,
-            pdf_config_path=pdf_config_path,
-            update_index=not args.no_index,
-            index_sort_by=args.index_sort_by,
-            index_only_with_pdf=args.index_only_with_pdf,
-            index_limit=args.index_limit,
-            enable_task_log=not args.no_task_log,
-            task_log_path=task_log_path,
-            post_start=args.post_start,
-            post_end=args.post_end,
-        )
-
     print(f"[OK] Topic ID : {result.topic_id}")
     print(f"[OK] Topic JSON: {result.raw_json_path}")
     print(f"[OK] Markdown : {result.markdown_path}")

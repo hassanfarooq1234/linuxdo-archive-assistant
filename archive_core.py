@@ -15,7 +15,6 @@ from urllib.parse import urljoin, urlparse, urlsplit
 
 import markdown
 import requests
-from camoufox.sync_api import Camoufox
 from lxml import html
 from playwright.sync_api import sync_playwright
 
@@ -107,85 +106,6 @@ class ArchiveResult:
     pdf_path: Path | None = None
     index_path: Path | None = None
     task_log_path: Path | None = None
-
-
-def parse_topic_id(topic_url: str) -> str:
-    parsed = urlparse(topic_url)
-    match = re.search(r"/t/(?:[^/]+/)?(\d+)", parsed.path)
-    if not match:
-        raise ValueError(f"Cannot parse topic id from URL: {topic_url}")
-    return match.group(1)
-
-
-def build_topic_json_url(topic_url: str) -> str:
-    parsed = urlparse(topic_url)
-    path = parsed.path.rstrip("/")
-    if path.endswith(".json"):
-        return topic_url
-    return f"{parsed.scheme}://{parsed.netloc}{path}.json"
-
-
-def fetch_topic_json(topic_url: str, json_url: str) -> dict[str, Any]:
-    with Camoufox(
-        headless=True,
-        os="windows",
-        geoip=False,
-        humanize=False,
-    ) as browser:
-        page = browser.new_page()
-        page.goto(topic_url, wait_until="domcontentloaded", timeout=120000)
-        page.wait_for_timeout(6000)
-
-        result = page.evaluate(
-            """
-            async ({ jsonUrl }) => {
-              const target = jsonUrl + (jsonUrl.includes('?') ? '&' : '?') + '_ts=' + Date.now();
-              const resp = await fetch(target, { credentials: 'include', cache: 'no-store' });
-              const text = await resp.text();
-              return { status: resp.status, ok: resp.ok, text };
-            }
-            """,
-            {"jsonUrl": json_url},
-        )
-
-        if not result["ok"]:
-            prefix = result["text"][:240].replace("\n", " ")
-            raise RuntimeError(f"Fetch failed: HTTP {result['status']} / {prefix}")
-
-        topic_data = json.loads(result["text"])
-
-        # Paginate: fetch remaining posts via stream IDs
-        stream = topic_data.get("post_stream", {}).get("stream", [])
-        loaded_ids = {p["id"] for p in topic_data.get("post_stream", {}).get("posts", [])}
-        missing_ids = [pid for pid in stream if pid not in loaded_ids]
-
-        if missing_ids:
-            topic_id = topic_data.get("id", "")
-            parsed = urlparse(topic_url)
-            base_origin = f"{parsed.scheme}://{parsed.netloc}"
-            batch_size = 20
-            for i in range(0, len(missing_ids), batch_size):
-                batch = missing_ids[i : i + batch_size]
-                params = "&".join(f"post_ids[]={pid}" for pid in batch)
-                batch_url = f"{base_origin}/t/{topic_id}/posts.json?{params}&_ts={int(time.time() * 1000)}"
-                batch_result = page.evaluate(
-                    """
-                    async ({ batchUrl }) => {
-                      const resp = await fetch(batchUrl, { credentials: 'include', cache: 'no-store' });
-                      const text = await resp.text();
-                      return { status: resp.status, ok: resp.ok, text };
-                    }
-                    """,
-                    {"batchUrl": batch_url},
-                )
-                if batch_result["ok"]:
-                    batch_data = json.loads(batch_result["text"])
-                    new_posts = batch_data.get("post_stream", {}).get("posts", [])
-                    topic_data["post_stream"]["posts"].extend(new_posts)
-                if i + batch_size < len(missing_ids):
-                    page.wait_for_timeout(2000)
-
-    return topic_data
 
 
 def infer_extension_from_url(url: str) -> str:
