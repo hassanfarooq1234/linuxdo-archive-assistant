@@ -56,9 +56,12 @@ class ImportGuard:
         if self._lock.locked():
             self._lock.release()
 
+    def is_busy(self) -> bool:
+        return self._lock.locked()
+
 
 class BridgeHandler(BaseHTTPRequestHandler):
-    server_version = "LinuxDoArchiveBridge/0.1"
+    server_version = "LinuxDoArchiveBridge/0.2"
 
     def _send_json(self, status: int, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -81,8 +84,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 HTTPStatus.OK,
                 {
                     "ok": True,
-                    "service": "challenge-05-linuxdo-archive",
+                    "service": "linuxdo-archive-bridge",
                     "mode": "local-bridge",
+                    "busy": self.server.guard.is_busy(),  # type: ignore[attr-defined]
                     "workspace_root": str(self.server.workspace_root),  # type: ignore[attr-defined]
                 },
             )

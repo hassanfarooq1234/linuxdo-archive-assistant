@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "LinuxDo Topic Archiver (Challenge 05)",
-  "version": "0.1.0",
-  "description": "Export current linux.do topic to local Markdown/PDF via local bridge service.",
+  "name": "Linux.do Archive Assistant",
+  "version": "0.2.0",
+  "description": "Export current Linux.do topic to local Markdown / PDF.",
   "permissions": ["activeTab", "scripting", "tabs", "storage"],
   "host_permissions": ["https://linux.do/*", "http://127.0.0.1:17805/*"],
   "action": {
-    "default_title": "Archive current topic",
+    "default_title": "Export current Linux.do topic",
     "default_popup": "popup.html"
   }
 }
