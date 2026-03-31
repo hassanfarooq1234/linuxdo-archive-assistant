@@ -150,6 +150,10 @@ def rewrite_post_html_and_download_images(
     image_retry_delay_seconds: float = 1.5,
 ) -> tuple[str, list[str]]:
     root = html.fragment_fromstring(cooked_html, create_parent="div")
+    detail_nodes = root.xpath(".//details")
+    for detail in detail_nodes:
+        detail.set("open", "open")
+
     img_nodes = root.xpath(".//img")
     local_files: list[str] = []
 
@@ -456,6 +460,18 @@ def markdown_to_html(
     a {{
       color: #2563eb;
       text-decoration: underline;
+    }}
+    details {{
+      margin: 12px 0;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fafafa;
+    }}
+    details > summary {{
+      font-weight: 600;
+      cursor: default;
+      margin-bottom: 8px;
     }}
     a[href]:after {{
       content: " (" attr(href) ")";
