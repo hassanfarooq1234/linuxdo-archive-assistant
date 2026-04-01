@@ -1,170 +1,162 @@
-# Linux.do 归档助手
+﻿# Linux.do 归档助手
 
-把当前 `linux.do` 帖子导出到本地，生成可长期保存和二次利用的归档目录：
+> 一键把 Linux.do 帖子导出成 Markdown 和带图 PDF，方便本地留档，也方便直接喂给 AI。
 
-- `Markdown`
-- `原始 JSON`
-- `图片`
-- `PDF`
+Linux.do 上有很多高质量长帖，但真正想把它们保存下来、继续整理、继续提问时，体验并不顺。
 
-这个项目采用 **浏览器扩展 + 本地桥** 的方式工作：
+复制粘贴容易丢格式，图片经常带不走；帖子楼层一多，手动整理也很累。这个项目就是为了解决这件事：**把当前打开的帖子快速导出成一份可保存、可转发、可继续利用的本地资料。**
 
-1. 你在浏览器里打开 `linux.do` 帖子
-2. 点击扩展里的“导出当前帖子”
-3. 扩展读取当前帖子的 JSON 数据
-4. 本地桥负责落盘、下载图片、生成 PDF
+---
 
-这样做的好处是：
+## 它解决什么问题
 
-- 不需要自动化登录抓站
-- 不做高频批量抓取
-- 更适合个人归档、研究整理、AI 上下文打包
+如果你也遇到过这些情况，这个工具大概率就是给你准备的：
 
-## 当前状态
+- 想把 Linux.do 的好帖长期留档
+- 想把帖子继续丢给 Claude / ChatGPT / Gemini 做整理或提问
+- 希望保留图片，而不只是留下一份纯文字
+- 不想再手动复制、贴图、拼上下文
 
-当前版本已经适合作为公开原型使用，主要能力包括：
+典型流程就是：
 
-- 导出当前 Linux.do 帖子到本地目录
-- 自动补齐分页楼层，不只抓首屏楼层
-- 可选生成 PDF
-- 支持导出指定楼层范围
-- 插件内显示导出阶段进度
-- 导出完成后可直接打开结果目录
-- 本地桥限制为单任务串行，降低误触和风控风险
+**打开帖子 → 点扩展导出 → 拿到本地 PDF / Markdown → 继续喂给 AI**
 
-## 推荐发布方式
+---
 
-建议采用双轨制：
+## 主要功能
 
-- 源码仓库：给开发者与跨平台用户
-- Windows 便携版：给普通 Windows 用户
+- 一键导出当前帖子
+- 保存 Markdown、原始 JSON、图片资源
+- 生成带图 PDF
+- 支持按楼层范围导出
+- 扩展面板显示导出进度
+- 导出完成后一键打开输出目录
+- Windows 便携版可直接分发给普通用户使用
 
-Windows 便携版的目标是：
+---
 
-- 不要求用户安装 Python / uv
-- 通过 `linuxdo-archive-bridge.exe` 提供本地桥
-- 保留 `browser-extension/` 供浏览器加载
-- 配套双击脚本与使用说明
+## 快速开始
 
-便携版构建脚本：`scripts/build_windows_portable.ps1`
-便携版说明：`docs/windows-portable-guide.md`
+### Windows 便携版
 
-## 目录结构
+适合普通用户，不需要自己配置 Python。
 
-- `archive_core.py`：归档核心逻辑
-- `save_linuxdo_topic.py`：命令行入口
-- `local_bridge_server.py`：本地桥 HTTP 服务
-- `browser-extension/`：浏览器扩展
-- `configs/pdf.default.json`：默认 PDF 样式配置
-- `docs/topic-import.schema.json`：扩展传给本地桥的数据契约
+1. 下载并解压便携包
+2. 双击 `01-start-bridge.cmd`
+3. 打开 Chrome，进入 `chrome://extensions/`
+4. 开启“开发者模式”
+5. 选择“加载已解压的扩展程序”
+6. 选择便携包里的 `browser-extension` 目录
+7. 打开任意 Linux.do 帖子，点击扩展里的“导出当前帖子”
 
-## 环境准备
+导出结果默认会放到：
 
-先安装依赖：
+```text
+dist/windows-portable/workspace/cases/
+```
 
-```powershell
+### 源码运行
+
+适合开发者，或想自己修改项目的人。
+
+环境要求：
+
+- Python 3.12+
+- `uv`
+
+示例：
+
+```bash
+git clone <repo-url>
+cd linuxdo-archive
 uv sync
 uv run playwright install chromium
+uv run python local_bridge_server.py
 ```
 
-## 使用方式
+然后在 Chrome 中加载 `browser-extension/` 即可。
 
-### 方式 A：浏览器扩展 + 本地桥
+---
 
-先启动本地桥：
+## 输出结构
 
-```powershell
-uv run python .\local_bridge_server.py
+每个帖子导出后会生成一个单独目录，例如：
+
+```text
+workspace/cases/1773192/
+  topic_1773192.md
+  topic_1773192.pdf
+  raw/topic_1773192.json
+  images/
 ```
 
-如果你想把输出统一放到某个工作区目录，也可以这样启动：
+其中：
 
-```powershell
-uv run python .\local_bridge_server.py --workspace-root "C:\path\to\workspace"
-```
+- `topic_xxx.md`：适合继续编辑、整理、检索
+- `topic_xxx.pdf`：适合直接分享、存档、喂给 AI
+- `raw/topic_xxx.json`：原始数据备份
+- `images/`：本地化后的图片资源
 
-然后：
+---
 
-1. 打开 `chrome://extensions/`
-2. 打开“开发者模式”
-3. 选择“加载已解压的扩展程序”
-4. 选择 `browser-extension`
-5. 打开任意 `https://linux.do/t/...` 帖子页
-6. 点击扩展里的“导出当前帖子”
+## 安全说明
 
-导出完成后，结果会出现在：
+这个项目的定位一直比较克制：
 
-- 默认：`cases/<topic_id>/`
-- 如果使用了 `--workspace-root`：`<workspace_root>/cases/<topic_id>/`
-
-### 方式 B：命令行直接导入 JSON
-
-如果你已经拿到帖子 JSON，也可以直接走 CLI：
-
-```powershell
-uv run python .\save_linuxdo_topic.py --input-json ".\topic.json" --output-dir ".\cases\1773192" --pdf
-```
-
-指定楼层范围示例：
-
-```powershell
-uv run python .\save_linuxdo_topic.py --input-json ".\topic.json" --output-dir ".\cases\1773192" --pdf --post-start 10 --post-end 30
-```
-
-## 浏览器扩展说明
-
-当前扩展界面提供：
-
-- `同时生成 PDF`
-- `高级选项 > 起始楼层 / 结束楼层`
-- `导出阶段进度显示`
-- `打开最近一次输出目录`
-
-说明：
-
-- 默认导出整帖
-- 楼层范围留空时表示不截断
-- 进度条主要覆盖“本地桥处理阶段”
-- 读取页面 JSON 的这一步仍然需要等浏览器完成
-
-## 输出内容
-
-每个帖子一般会生成这些文件：
-
-- `topic_<topic_id>.md`
-- `topic_<topic_id>.pdf`
-- `raw/topic_<topic_id>.json`
-- `images/...`
-
-还可能包含：
-
-- `topic_<topic_id>.html`
-- `cases/index.md`
-- `logs/archive_tasks.jsonl`
-
-## 安全原则
-
-- 只处理当前打开的帖子页
-- 只和本机 `127.0.0.1` 通信
-- 不存储账号密码
+- 只处理你当前打开的帖子
+- 不做批量抓站
+- 不存账号密码
 - 不导出 Cookie
-- 本地桥默认单任务串行
-- 不建议做批量高频连续导出
+- 本地桥只监听 `127.0.0.1`
+- 数据尽量在本地处理
 
-## 快速验证
+它更接近一个“本地归档助手”，而不是一个面向批量采集的爬虫工具。
 
-```powershell
-uv run python .\save_linuxdo_topic.py --help
-uv run python .\local_bridge_server.py --help
-node --check .\browser-extension\popup.js
-```
+---
 
 ## 适合谁
 
-这个项目更适合：
+- 想长期保存 Linux.do 优质内容的人
+- 想把帖子内容继续交给 AI 分析的人
+- 想保留图文上下文的人
+- 想把论坛内容整理成本地知识库素材的人
 
-- 想把帖子长期留档的人
-- 想把完整图文内容喂给 AI 的人
-- 想保留楼层、图片、PDF 成果的人
+---
 
-如果你的目标是“一键安装、完全无本地依赖、普通用户零配置”，那这项目还可以继续往前包装一层，但当前版本已经适合作为开源原型发布和收集反馈。
+## 项目结构
+
+- `browser-extension/`：浏览器扩展
+- `local_bridge_server.py`：本地桥服务
+- `archive_core.py`：归档核心逻辑
+- `scripts/`：构建和辅助脚本
+- `packaging/`：便携版打包配置
+- `docs/`：文档与发布材料
+
+---
+
+## 项目状态
+
+当前项目已经具备可分享、可开源、可分发的基础形态：
+
+- 核心导出链路可用
+- Windows 便携版已打通
+- 可双击启动本地桥
+- 扩展面板可显示进度
+- 适合继续面向社区发布和收集反馈
+
+---
+
+## 开源与反馈
+
+如果你想：
+
+- 反馈 Bug
+- 提功能建议
+- 自己改造这套工具
+- 直接拿去做个人归档
+
+欢迎关注后续仓库与发布页。
+
+<!-- TODO: 补 GitHub 仓库链接 -->
+<!-- TODO: 补 Releases 链接 -->
+<!-- TODO: 补扩展截图 / 演示 GIF -->
