@@ -3,10 +3,13 @@ const BRIDGE_URL = `${BRIDGE_BASE_URL}/import-topic`;
 const BRIDGE_HEALTH_URL = `${BRIDGE_BASE_URL}/health`;
 const BRIDGE_TASK_STATUS_URL = `${BRIDGE_BASE_URL}/task-status`;
 const BRIDGE_OPEN_FOLDER_URL = `${BRIDGE_BASE_URL}/open-folder`;
+const BRIDGE_START_HINT = "如果显示未启动，请双击便携包里的 01-start-bridge.cmd";
 const DEFAULT_STATUS_TITLE = "准备就绪";
 const DEFAULT_STATUS_META = "打开一个 Linux.do 帖子后，点击上方按钮开始导出。";
 const DEFAULT_LOG = "默认导出整帖，可在“高级选项”里限制楼层范围。";
 const STORAGE_KEYS = ["enablePdf", "postStart", "postEnd", "advancedOpen"];
+const ACTIVE_TASK_STORAGE_KEY = "activeTaskState";
+const UI_STATE_STORAGE_KEY = "popupUiState";
 
 const exportBtn = document.getElementById("exportBtn");
 const openFolderBtn = document.getElementById("openFolderBtn");
@@ -23,17 +26,72 @@ const statusMetaEl = document.getElementById("statusMeta");
 const logEl = document.getElementById("log");
 
 let latestOutputDir = "";
+let activePollTaskId = "";
 
-function setProgress(percent) {
+function getUiStateSnapshot() {
+  const progress = Number.parseInt(progressText.textContent || "0", 10);
+  return {
+    progress: Number.isFinite(progress) ? progress : 0,
+    title: statusTitleEl.textContent || DEFAULT_STATUS_TITLE,
+    meta: statusMetaEl.textContent || DEFAULT_STATUS_META,
+    log: logEl.textContent || DEFAULT_LOG,
+    latestOutputDir,
+    updatedAt: Date.now(),
+  };
+}
+
+async function persistUiState() {
+  try {
+    await chrome.storage.local.set({
+      [UI_STATE_STORAGE_KEY]: getUiStateSnapshot(),
+    });
+  } catch {}
+}
+
+function applyUiState(uiState) {
+  if (!uiState || typeof uiState !== "object") {
+    return false;
+  }
+
+  if (typeof uiState.progress === "number") {
+    setProgress(uiState.progress, false);
+  }
+  statusTitleEl.textContent = uiState.title || DEFAULT_STATUS_TITLE;
+  statusMetaEl.textContent = uiState.meta || DEFAULT_STATUS_META;
+  logEl.textContent = uiState.log || DEFAULT_LOG;
+  setLatestOutputDir(uiState.latestOutputDir || "", false);
+  return true;
+}
+
+async function setActiveTaskState(taskId) {
+  activePollTaskId = taskId || "";
+  await chrome.storage.local.set({
+    [ACTIVE_TASK_STORAGE_KEY]: {
+      taskId: activePollTaskId,
+      updatedAt: Date.now(),
+    },
+  });
+}
+
+async function clearActiveTaskState() {
+  activePollTaskId = "";
+  await chrome.storage.local.remove(ACTIVE_TASK_STORAGE_KEY);
+}
+
+function setProgress(percent, persist = true) {
   const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
   progressBar.style.width = `${safePercent}%`;
   progressText.textContent = `${safePercent}%`;
+  if (persist) {
+    void persistUiState();
+  }
 }
 
 function setStatus(title, meta = "", logMessage = "") {
   statusTitleEl.textContent = title;
   statusMetaEl.textContent = meta;
   logEl.textContent = logMessage;
+  void persistUiState();
 }
 
 function setBridgeBadge(kind, text) {
@@ -58,9 +116,12 @@ function setBusy(isBusy) {
   openFolderBtn.disabled = !latestOutputDir;
 }
 
-function setLatestOutputDir(path) {
+function setLatestOutputDir(path, persist = true) {
   latestOutputDir = path || "";
   openFolderBtn.disabled = !latestOutputDir;
+  if (persist) {
+    void persistUiState();
+  }
 }
 
 function wait(ms) {
@@ -148,7 +209,7 @@ async function refreshBridgeStatus() {
   }
 
   setBridgeBadge("offline", "未启动");
-  setBridgeHint("请先启动本地桥：uv run python .\\local_bridge_server.py", true);
+  setBridgeHint(BRIDGE_START_HINT, true);
 }
 
 async function ensureBridgeReady() {
@@ -156,7 +217,7 @@ async function ensureBridgeReady() {
   if (health.ok) {
     return health;
   }
-  throw new Error("本地桥未启动，请先运行 uv run python .\\local_bridge_server.py");
+  throw new Error("本地桥未启动，请先双击便携包里的 01-start-bridge.cmd");
 }
 
 async function fetchTopicJsonInPage(postStart, postEnd) {
@@ -297,7 +358,12 @@ async function submitAsyncImport(payload, maxAttempts = 3) {
 }
 
 async function pollTaskStatus(taskId) {
+  activePollTaskId = taskId;
   while (true) {
+    if (!activePollTaskId || activePollTaskId !== taskId) {
+      return null;
+    }
+
     const response = await fetch(`${BRIDGE_TASK_STATUS_URL}?task_id=${encodeURIComponent(taskId)}`, {
       cache: "no-store",
     });
@@ -316,6 +382,7 @@ async function pollTaskStatus(taskId) {
     if (task.status === "completed") {
       const result = task.result || {};
       setLatestOutputDir(result.output_dir || "");
+      await clearActiveTaskState();
       setProgress(100);
       setStatus(
         "导出完成",
@@ -331,6 +398,7 @@ async function pollTaskStatus(taskId) {
     }
 
     if (task.status === "failed") {
+      await clearActiveTaskState();
       throw new Error(task.error || task.message || "导出失败");
     }
 
@@ -421,10 +489,12 @@ async function runExport() {
     };
 
     const accepted = await submitAsyncImport(payload, 3);
+    await setActiveTaskState(accepted.task_id);
     setProgress(25);
     setStatus("后台处理中", accepted.message || "任务已被本地桥接收。", `任务 ID: ${accepted.task_id}`);
     await pollTaskStatus(accepted.task_id);
   } catch (error) {
+    await clearActiveTaskState();
     setProgress(100);
     setStatus("导出失败", error?.message || String(error), "请先确认本地桥已启动，再重试一次。");
   } finally {
@@ -448,8 +518,32 @@ openFolderBtn.addEventListener("click", async () => {
 
 (async () => {
   await loadOptions();
-  setProgress(0);
-  setStatus(DEFAULT_STATUS_TITLE, DEFAULT_STATUS_META, DEFAULT_LOG);
-  setLatestOutputDir("");
+  const stored = await chrome.storage.local.get([ACTIVE_TASK_STORAGE_KEY, UI_STATE_STORAGE_KEY]);
+  const hasRestoredUi = applyUiState(stored[UI_STATE_STORAGE_KEY]);
+
+  if (!hasRestoredUi) {
+    setProgress(0);
+    setStatus(DEFAULT_STATUS_TITLE, DEFAULT_STATUS_META, DEFAULT_LOG);
+    setLatestOutputDir("");
+  }
+
+  if (stored[ACTIVE_TASK_STORAGE_KEY]?.taskId) {
+    setBusy(true);
+    setStatus(
+      statusTitleEl.textContent || "正在恢复进度",
+      statusMetaEl.textContent || "检测到未完成的导出任务，正在恢复进度。",
+      logEl.textContent || "",
+    );
+    try {
+      await pollTaskStatus(stored[ACTIVE_TASK_STORAGE_KEY].taskId);
+    } catch (error) {
+      await clearActiveTaskState();
+      setProgress(100);
+      setStatus("恢复进度失败", error?.message || String(error), "请重新点一次导出，或先确认本地桥仍在运行。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   await refreshBridgeStatus();
 })();

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from html import escape as html_escape
 import json
+import os
 import re
 import time
 from dataclasses import dataclass
@@ -17,6 +18,18 @@ from urllib.parse import urljoin, urlparse, urlsplit
 import markdown
 import requests
 from lxml import html
+
+
+def configure_playwright_browsers_path() -> None:
+    if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        return
+    bundled_browsers_dir = get_app_root_dir() / "playwright-browsers"
+    if bundled_browsers_dir.exists():
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(bundled_browsers_dir)
+
+
+configure_playwright_browsers_path()
+
 from playwright.sync_api import sync_playwright
 
 

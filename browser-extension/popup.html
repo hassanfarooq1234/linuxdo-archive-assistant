@@ -32,11 +32,21 @@
         color: var(--text);
         letter-spacing: 0.01em;
         -webkit-font-smoothing: antialiased;
+        overflow: hidden;
       }
 
       .wrap {
         width: 360px;
         padding: 16px;
+        max-height: 600px;
+        overflow-y: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+
+      .wrap::-webkit-scrollbar {
+        width: 0;
+        height: 0;
       }
 
       .header {
@@ -286,21 +296,13 @@
         border-top: 1px solid var(--border);
         max-height: 80px;
         overflow-y: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
       }
       
       .log::-webkit-scrollbar {
-        width: 4px;
-      }
-      .log::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.2);
-        border-radius: 4px;
-      }
-      .log::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.15);
-        border-radius: 4px;
-      }
-      .log::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.25);
+        width: 0;
+        height: 0;
       }
     </style>
   </head>
@@ -316,7 +318,7 @@
           <span class="label">本地桥状态</span>
           <span id="bridgeBadge" class="badge">检测中</span>
         </div>
-        <div id="bridgeHint" class="help">使用前请先启动本地桥：`uv run python .\local_bridge_server.py`</div>
+        <div id="bridgeHint" class="help">如果显示未启动，请双击便携包里的 `01-start-bridge.cmd`</div>
       </div>
 
       <div class="card">

@@ -9,6 +9,7 @@ Set-Location $root
 
 Write-Host '[1/5] Installing packaging dependency...'
 uv pip install pyinstaller
+uv run playwright install chromium
 
 Write-Host '[2/5] Cleaning old build output...'
 if (Test-Path $release) { Remove-Item -Recurse -Force $release }
@@ -23,10 +24,39 @@ Copy-Item -Recurse -Force .\configs (Join-Path $release 'configs')
 Copy-Item -Force .\README.md (Join-Path $release 'README.md')
 Copy-Item -Force .\docs\windows-portable-guide.md (Join-Path $release 'WINDOWS-PORTABLE-GUIDE.md')
 
+$playwrightBrowsersRoot = Join-Path $env:LOCALAPPDATA 'ms-playwright'
+$bundledBrowsersRoot = Join-Path $release 'playwright-browsers'
+if (-not (Test-Path $playwrightBrowsersRoot)) {
+  throw "Playwright browsers not found at $playwrightBrowsersRoot"
+}
+
+$browsersJson = uv run python -c "import json, pathlib, playwright; p = pathlib.Path(playwright.__file__).resolve().parent / 'driver' / 'package' / 'browsers.json'; data = json.loads(p.read_text(encoding='utf-8')); print(json.dumps(data))"
+$browserMeta = $browsersJson | ConvertFrom-Json
+$chromiumRevision = ($browserMeta.browsers | Where-Object { $_.name -eq 'chromium' } | Select-Object -First 1).revision
+$headlessRevision = ($browserMeta.browsers | Where-Object { $_.name -eq 'chromium-headless-shell' } | Select-Object -First 1).revision
+$ffmpegRevision = ($browserMeta.browsers | Where-Object { $_.name -eq 'ffmpeg' } | Select-Object -First 1).revision
+
+New-Item -ItemType Directory -Force -Path $bundledBrowsersRoot | Out-Null
+
+$browserDirs = @(
+  "chromium-$chromiumRevision",
+  "chromium_headless_shell-$headlessRevision",
+  "ffmpeg-$ffmpegRevision"
+)
+
+foreach ($dirName in $browserDirs) {
+  $sourceDir = Join-Path $playwrightBrowsersRoot $dirName
+  if (-not (Test-Path $sourceDir)) {
+    throw "Required Playwright browser folder not found: $sourceDir"
+  }
+  Copy-Item -Recurse -Force $sourceDir (Join-Path $bundledBrowsersRoot $dirName)
+}
+
 $launchStart = @(
   '@echo off',
   'setlocal',
   'cd /d "%~dp0"',
+  'set "PLAYWRIGHT_BROWSERS_PATH=%~dp0playwright-browsers"',
   'if not exist "%~dp0workspace" mkdir "%~dp0workspace"',
   'if not exist "%~dp0workspace\cases" mkdir "%~dp0workspace\cases"',
   'if not exist "%~dp0workspace\logs" mkdir "%~dp0workspace\logs"',
